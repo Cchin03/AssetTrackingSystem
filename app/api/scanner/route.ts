@@ -62,7 +62,7 @@ const UnassignSchema = z.object({
 // Update an asset's location or department
 const TagAssetSchema = z.object({
   action: z.literal('tag_asset'),
-  assetId: z.string().min(1).max(100).trim(),
+  assetId: z.string().min(1).max(30).trim(),
   field: z.enum(['location_id', 'department_id']), // only allow these two fields to be updated
   value: z.string().min(1).max(100).trim(),
 })
@@ -70,14 +70,14 @@ const TagAssetSchema = z.object({
 // Create a brand new asset record
 const CreateAssetSchema = z.object({
   action: z.literal('create_asset'),
-  asset_id: z.string().min(1).max(100).trim(),
-  name: z.string().min(1).max(200).trim(),
-  description: z.string().max(500).optional(),
+  asset_id: z.string().min(1).max(30).trim(),
+  name: z.string().min(1).max(50).trim(),
+  description: z.string().max(200).optional(),
   condition: z.enum(['In-use', 'In-store', 'Spoiled']),
-  category: z.string().min(1).max(100).trim(),
-  model: z.string().min(1).max(100).trim(),
-  location_id: z.string().max(100).optional(),
-  department_id: z.string().max(100).optional(),
+  category: z.string().min(1).max(50).trim(),
+  model: z.string().min(1).max(30).trim(),
+  location_id: z.string().max(30).nullable().optional(),
+  department_id: z.string().max(30).nullable().optional(),
 })
 
 // ============================================================

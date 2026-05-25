@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const page = Math.max(parseInt(searchParams.get('page') || '1'), 1)
-    const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 100)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 500)
     const search = (searchParams.get('search') || '').slice(0, 100)
     const allowedSearchFields = ['staff_id', 'name', 'email']
     const searchField = allowedSearchFields.includes(searchParams.get('searchField') || '')
