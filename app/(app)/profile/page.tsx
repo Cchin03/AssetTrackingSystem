@@ -16,6 +16,7 @@ export default function ProfilePage() {
   const { data: session, status } = useSession()
   const [assignedAssets, setAssignedAssets] = useState<any[]>([])
   const [isLoadingAssets, setIsLoadingAssets] = useState(true)
+  const [showAllAssets, setShowAllAssets] = useState(false)
   // const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   // const [isProfileOpen, setIsProfileOpen] = useState(false)
   // const [activeItem, setActiveItem] = useState<string | null>('/profile')
@@ -58,8 +59,8 @@ export default function ProfilePage() {
   // Show nothing while checking session, or if user is not logged in (useAuth will redirect to /login)
   if (isAuthLoading || !isAuthenticated) return null
 
-  // Show max 3 assets, with "View All" if more than 3
-  const displayAssets = assignedAssets.slice(0, 3)
+  // show all assets or just first 3 depending on showAllAssets state
+  const displayAssets = showAllAssets ? assignedAssets : assignedAssets.slice(0, 3)
   const hasMoreAssets = assignedAssets.length > 3
   const breadcrumbItems = [
     { label: 'Home', href: '/admin/dashboard', isClickable: true },
@@ -161,14 +162,16 @@ export default function ProfilePage() {
                         </div>
                       ))}
 
-                      {/* View All Button */}
+                      {/* toggle show all / collapse */}
                       {hasMoreAssets && (
                         <button
-                          onClick={() => alert('Assigned Assets page - to be implemented')}
+                          onClick={() => setShowAllAssets(!showAllAssets)}
                           className="w-full bg-red-600 hover:bg-red-700 text-white rounded-full px-4 py-3 flex items-center justify-center space-x-2 transition-colors"
                         >
-                          <span className="text-lg font-semibold">+</span>
-                          <span className="text-sm font-medium">View All Assets ({assignedAssets.length})</span>
+                          <span className="text-lg font-semibold">{showAllAssets ? '−' : '+'}</span>
+                          <span className="text-sm font-medium">
+                            {showAllAssets ? 'Show Less' : `View All Assets (${assignedAssets.length})`}
+                          </span>
                         </button>
                       )}
                     </>
