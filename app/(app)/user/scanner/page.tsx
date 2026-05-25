@@ -1141,6 +1141,9 @@ export default function ScannerPage() {
         payload[field] = parentScan.id
       }
 
+      // Debug line: To show exactly what Zod is rejecting
+    console.log("Sending Payload to API:", JSON.stringify(payload, null, 2));
+
       // Send the data to the backend API to create the new asset record in the database
       const result = await scannerFetch.post(payload)
 
@@ -1160,8 +1163,8 @@ export default function ScannerPage() {
         page: parentScan ? `Tagged to ${parentScan.name}` : 'New Asset Registered'
       })
 
-      // setPageState('success');
-      // setParentScan(null);
+      setPageState('success')
+      setParentScan(null)
     } catch (err: unknown) { 
       alert(err instanceof Error ? err.message : String(err))
     }

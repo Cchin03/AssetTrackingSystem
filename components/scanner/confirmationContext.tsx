@@ -1,6 +1,6 @@
-'use client';
-import React, { useState, useEffect, useRef } from "react";
-import type { Database } from '@/lib/supabase/types';
+'use client'
+import React, { useState, useEffect, useRef } from "react"
+import type { Database } from '@/lib/supabase/types'
 // Removed direct Supabase client import — all database calls now go through API routes
 // to prevent table names and queries from leaking in the browser Network tab
 import {
@@ -16,42 +16,45 @@ import {
   Sparkles,
   PenLine,
   RefreshCw,
-} from "lucide-react";
+} from "lucide-react"
 
 // Types (WC)
 type Asset = {
   asset_id: string; name: string; description: string;
   location_id: string; department_id: string;
   condition: string; category: string; model: string;
-};
+}
 
-type Department = Database['public']['Tables']['Department']['Row'];
-type Location = Database['public']['Tables']['Location']['Row'];
-type PriorityLevel = 'none' | 'low' | 'medium' | 'high';
-type ConditionStatus = 'In-use' | 'In-store' | 'Spoiled';
+type Department = Database['public']['Tables']['Department']['Row']
+type Location = Database['public']['Tables']['Location']['Row']
+type PriorityLevel = 'none' | 'low' | 'medium' | 'high'
+type ConditionStatus = 'In-use' | 'In-store' | 'Spoiled'
 
 export type SubmitResult = {
-  asset_id: string;
-  name: string;
-  category: string;
-  model: string;
-  condition: string;
-  location_id: string | null;
-  department_id: string | null;
-  submitType: string;
-};
+  asset_id: string
+  name: string
+  category: string
+  model: string
+  condition: string
+  location_id: string | null
+  department_id: string | null
+  submitType: string
+}
 
 // limit the feedback to 50 words, sanitize input to prevent any special characters that could cause issues in the database or display (WC)
-const FEEDBACK_MAX_WORDS = 50;
+const FEEDBACK_MAX_WORDS = 50
 function countWords(text: string): number {
   return text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
 }
 function sanitizeFeedback(raw: string): string {
-  return raw.replace(/[^a-zA-Z0-9\s.,!?;:()\-'"]/g, '');
+  return raw.replace(/[^a-zA-Z0-9\s.,!?;:()\-'"]/g, '')
 }
 function truncateToWords(text: string | null | undefined, maxWords: number): string {
-  if (!text) return '';
-  return text.trim().split(/\s+/).slice(0, maxWords).join(' ');
+  if (!text) {
+    return ''
+  }
+
+  return text.trim().split(/\s+/).slice(0, maxWords).join(' ')
 }
 
 const conditionOptions: ConditionStatus[] = ['In-use', 'In-store', 'Spoiled'];
@@ -62,7 +65,7 @@ const priorityColors: Record<PriorityLevel, { bg: string; border: string; text: 
   medium: { bg: '#fff7ed', border: '#fdba74', text: '#ea580c' },
   low: { bg: '#fefce8', border: '#fde047', text: '#ca8a04' },
   none: { bg: '#f0fdf4', border: '#86efac', text: '#16a34a' },
-};
+}
 
 // Main component (WC) 
 export default function ConfirmationContent({
@@ -132,120 +135,157 @@ export default function ConfirmationContent({
   //  Data fetching (WC)
   useEffect(() => {
     const load = async () => {
-      if (!item?.code) { setMode('error'); setError('Invalid asset data.'); return; }
+      if (!item?.code) { 
+        setMode('error') 
+        setError('Invalid asset data.')
+        
+        return 
+      }
+
       setMode('loading');
 
-    const [locRes, deptRes] = await Promise.all([
-      fetch('/api/location'),
-      fetch('/api/department'),
-    ]);
-    const locJson  = await locRes.json();
-    const deptJson = await deptRes.json();
-    setLocations(locJson.data   || []);
-    setDepartments(deptJson.data || []);
+      const [locRes, deptRes] = await Promise.all([
+        fetch('/api/location?limit=500'),
+        fetch('/api/department?limit=500'),
+      ])
 
-    try {
-      // Check if asset exists in the database (WC)
-      const params = new URLSearchParams({
-        table: 'Asset',
-        idColumn: 'asset_id',
-        scannedCode: item.code,
-      });
+      const locJson  = await locRes.json()
+      const deptJson = await deptRes.json()
+      setLocations(locJson.data   || [])
+      setDepartments(deptJson.data || [])
 
-      // If asset is not found, we will go to the registering page, otherwise we will show the editing page (WC)
-      const res = await fetch(`/api/scanner?${params}`);
-      const result = await res.json();
+      try {
+        // Check if asset exists in the database (WC)
+        const params = new URLSearchParams({
+          table: 'Asset',
+          idColumn: 'asset_id',
+          scannedCode: item.code,
+        })
 
-      if (!result.success || !result.data) {
-        setMode('registering');
-      } else {
-        const d = result.data as Asset;
-        setAssetDetails(d);
-        setCondition((d.condition as ConditionStatus) || 'In-use');
-        setSelectedLocation(d.location_id || '');
-        setSelectedDepartment(d.department_id || '');
-        setMode('editing');
+        // If asset is not found, we will go to the registering page, otherwise we will show the editing page (WC)
+        const res = await fetch(`/api/scanner?${params}`)
+        const result = await res.json()
+
+        if (!result.success || !result.data) {
+          setMode('registering')
+        } else {
+          const d = result.data as Asset
+          setAssetDetails(d)
+          setCondition((d.condition as ConditionStatus) || 'In-use')
+          setSelectedLocation(d.location_id || '')
+          setSelectedDepartment(d.department_id || '')
+          setMode('editing')
+        }
+      } catch (err: any) {
+        setMode('error')
+        setError(err.message || 'An unknown error occurred.')
       }
-    } catch (err: any) {
-      setMode('error');
-      setError(err.message || 'An unknown error occurred.');
     }
-    };
-    load();
-  }, [item, tableName]);
+    load()
+  }, [item, tableName])
 
   // Camera setup and handlers (WC)
   useEffect(() => {
     if (pendingCameraMode && videoRef.current) {
-      initializeCamera(pendingCameraMode);
-      setPendingCameraMode(null);
+      initializeCamera(pendingCameraMode)
+      setPendingCameraMode(null)
     }
-  }, [pendingCameraMode, showCamera]);
+  }, [pendingCameraMode, showCamera])
 
   // Cleanup camera stream on unmount (WC)
   const initializeCamera = async (m: 'user' | 'environment') => {
     try {
       const ms = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: m, width: { ideal: 1920 }, height: { ideal: 1080 } },
-      });
-      if (videoRef.current) { videoRef.current.srcObject = ms; setStream(ms); setFacingMode(m); }
-    } catch (err) { console.error('Camera error:', err); setShowCamera(false); }
-  };
+        video: { 
+          facingMode: m, 
+          width: { ideal: 1920 }, 
+          height: { ideal: 1080 } 
+        },
+      })
+
+      if (videoRef.current) { 
+        videoRef.current.srcObject = ms
+        setStream(ms)
+        setFacingMode(m)
+      }
+
+    } catch (err) { 
+      console.error('Camera error:', err); setShowCamera(false)
+    }
+  }
 
   // Start camera with specified mode, default to environment (rear) camera.
   //  Stop camera and release stream when done. Capture photo from video stream and convert to File object for upload (WC)
   const startCamera = (m: 'user' | 'environment' = 'environment') => {
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    setShowCamera(true);
-    setPendingCameraMode(m);
-  };
+    if (stream) stream.getTracks().forEach(t => t.stop())
+    setShowCamera(true)
+    setPendingCameraMode(m)
+  }
 
   // Stop camera and release stream (WC)
   const stopCamera = () => {
-    if (stream) { stream.getTracks().forEach(t => t.stop()); setStream(null); }
-    setShowCamera(false);
-  };
+    if (stream) { 
+      stream.getTracks().forEach(t => t.stop())
+      setStream(null)
+    }
+
+    setShowCamera(false)
+  }
 
   // Toggle between front and rear camera (WC)
   const capturePhoto = () => {
     if (videoRef.current && canvasRef.current) {
-      const v = videoRef.current, c = canvasRef.current;
-      c.width = v.videoWidth; c.height = v.videoHeight;
-      const ctx = c.getContext('2d');
+      const v = videoRef.current, c = canvasRef.current
+      c.width = v.videoWidth; c.height = v.videoHeight
+      const ctx = c.getContext('2d')
       if (ctx) {
-        ctx.drawImage(v, 0, 0);
+        ctx.drawImage(v, 0, 0)
         c.toBlob((blob) => {
           if (blob) {
             const file = new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
-            setImageFile(file); setImagePreview(c.toDataURL('image/jpeg')); stopCamera();
+            setImageFile(file)
+            setImagePreview(c.toDataURL('image/jpeg'))
+            stopCamera()
           }
-        }, 'image/jpeg', 0.95);
+        }, 'image/jpeg', 0.95)
       }
     }
   };
 
   // Handle image file selection from local storage, validate file type and size, and create preview (WC)
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]
+    if (!file) {
+      return
+    }
+
     // Only allow jpeg, png, webp under 10MB, you can adjust this as needed (WC)
-    const valid = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (!valid.includes(file.type) || file.size > 10 * 1024 * 1024) return;
-    setImageFile(file);
+    const valid = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!valid.includes(file.type) || file.size > 10 * 1024 * 1024) {
+      return
+    }
+
+    setImageFile(file)
     // Create image preview (WC)
-    const reader = new FileReader();
-    reader.onload = (ev) => setImagePreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
+    const reader = new FileReader()
+    reader.onload = (ev) => setImagePreview(ev.target?.result as string)
+    reader.readAsDataURL(file)
   };
 
   // Clear selected image and preview, and stop camera if active (WC)
   const clearImage = () => {
-    setImageFile(null); setImagePreview(''); stopCamera();
-  };
+    setImageFile(null)
+    setImagePreview('')
+    stopCamera()
+  }
 
   // Reset AI result and errors when user changes condition or maintenance needed status, 
   // to prompt them to re-analyze if they make changes after an AI assessment (WC)
-  const resetAi = () => { setAiResult(null); setAiError(''); clearImage(); };
+  const resetAi = () => { 
+    setAiResult(null)
+    setAiError('')
+    clearImage() 
+  }
 
   // Utility function to encode image file to base64 for API upload (WC)
   const encodeImage = (file: File): Promise<{ base64: string; mime: string }> =>
@@ -617,7 +657,13 @@ export default function ConfirmationContent({
               className={`w-full p-3 border-2 rounded-lg focus:outline-none text-gray-800 ${aiLoading ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white border-gray-300 focus:border-red-500'}`}
             >
               <option value="">-- None --</option>
-              {locations.map(loc => <option key={loc.location_id} value={loc.location_id}>{loc.name}</option>)}
+              {/* Commented by Desmond @ 25-May-26: Fixed it so that location will display id and name */}
+              {
+                locations.map(loc => 
+                  <option key={loc.location_id} value={loc.location_id}>
+                    {loc.location_id} - {loc.name}
+                  </option>)
+              }
             </select>
           </div>
           <div>
@@ -862,7 +908,13 @@ export default function ConfirmationContent({
           <select value={selectedLocation} onChange={(e) => setSelectedLocation(e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-lg mt-1">
             <option value="">-- None --</option>
-            {locations.map(loc => <option key={loc.location_id} value={loc.location_id}>{loc.name}</option>)}
+            {/* Commented by Desmond @ 25-May-26: Fixed it so that location will display id and name */}
+              {
+                locations.map(loc => 
+                  <option key={loc.location_id} value={loc.location_id}>
+                    {loc.location_id} - {loc.name}
+                  </option>)
+              }
           </select>
         </div>
       )}
@@ -879,7 +931,7 @@ export default function ConfirmationContent({
         </div>
       )}
     </div>
-  );
+  )
 
   const renderRegisteringContent = () => (
     <div className="p-6 lg:p-8 space-y-6">
@@ -929,12 +981,12 @@ export default function ConfirmationContent({
         </div>
       </div>
     </div>
-  );
+  )
 
   // Render main content based on current mode and page step, 
   // showing loading state, error message, confirmation details, or update form as needed (WC)
   const renderFormContent = () => {
-    if (mode === 'loading') return <div className="p-8 text-center text-gray-500">Searching for asset...</div>;
+    if (mode === 'loading') return <div className="p-8 text-center text-gray-500">Searching for asset...</div>
     if (mode === 'error') return (
       <div className="p-8">
         <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-center">
@@ -942,18 +994,18 @@ export default function ConfirmationContent({
           <p>{error}</p>
         </div>
       </div>
-    );
-    if (mode === 'editing') return pageStep === 'confirm' ? renderConfirmStep() : renderUpdateStep();
-    if (mode === 'registering') return renderRegisteringContent();
-    return null;
-  };
+    )
+    if (mode === 'editing') return pageStep === 'confirm' ? renderConfirmStep() : renderUpdateStep()
+    if (mode === 'registering') return renderRegisteringContent()
+    return null
+  }
 
   // Get header title based on mode and page step, to provide clear context to user (WC)
   const getHeaderTitle = () => {
-    if (mode === 'registering') return 'Register Asset';
-    if (mode === 'editing' && pageStep === 'update') return 'Update Asset';
-    return 'Confirm Asset';
-  };
+    if (mode === 'registering') return 'Register Asset'
+    if (mode === 'editing' && pageStep === 'update') return 'Update Asset'
+    return 'Confirm Asset'
+  }
 
   // Bottom buttons 
   const renderButtons = () => {
@@ -962,7 +1014,7 @@ export default function ConfirmationContent({
         <button type="button" onClick={onBack} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium shadow-md">
           <ChevronLeft className="w-5 h-5" /> Back to Scan
         </button>
-      );
+      )
     }
     if (mode === 'editing' && pageStep === 'confirm') {
       return (
@@ -974,26 +1026,26 @@ export default function ConfirmationContent({
             <Edit className="w-5 h-5" /> Update Asset
           </button>
         </>
-      );
+      )
     }
     if (mode === 'editing' && pageStep === 'update') {
       return (
         <button
           type="button"
           onClick={() => {
-            setPageStep('confirm');
-            setConditionMethod('manual');
-            clearImage();
-            setManualError(null);
-            setAiError('');
-            setAiSubmitError(null);
-            resetAi();
+            setPageStep('confirm')
+            setConditionMethod('manual')
+            clearImage()
+            setManualError(null)
+            setAiError('')
+            setAiSubmitError(null)
+            resetAi()
           }}
           className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium shadow-md"
         >
           <ChevronLeft className="w-5 h-5" /> Back
         </button>
-      );
+      )
     }
     if (mode === 'registering') {
       return (
@@ -1005,10 +1057,10 @@ export default function ConfirmationContent({
             <Save className="w-5 h-5" /> Register New Asset
           </button>
         </>
-      );
+      )
     }
-    return null;
-  };
+    return null
+  }
 
   // Main render with conditional content and buttons based on mode and page step, 
   // wrapped in a form for handling submissions (WC) 
@@ -1038,5 +1090,5 @@ export default function ConfirmationContent({
         </form>
       </div>
     </div>
-  );
+  )
 }
