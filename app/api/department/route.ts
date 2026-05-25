@@ -17,7 +17,7 @@ import { generateAndUploadQr, deleteQr } from '@/lib/qrcode/qrcode'
 
 const getQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
-  limit: z.coerce.number().min(1).max(100).default(10),
+  limit: z.coerce.number().min(1).max(500).default(100),
   search: z.string().optional().default(''),
   searchField: z.enum(['name', 'department_id']).default('name'),
   sortBy: z.enum(['department_id', 'name', 'block', 'level', 'created_dt']).default('created_dt'),
