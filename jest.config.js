@@ -30,8 +30,25 @@ module.exports = {
     'node_modules/(?!(.*\\.mjs$))',
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
+
+  collectCoverage: true,
+
   collectCoverageFrom: [
+    // Audits your custom components
     'components/**/*.{js,jsx,ts,tsx}',
-    'app/**/*.{js,jsx,ts,tsx}',
+    
+    // Audits Next.js UI pages and API routes
+    'app/**/page.{js,jsx,ts,tsx}',
+    'app/api/**/route.{js,jsx,ts,tsx}',
+    
+    // EXCLUSIONS: Prevents Jest from auditing configurations or test files themselves
+    '!**/node_modules/**',
+    '!**/*.test.{js,jsx,ts,tsx}',
+    '!**/*.spec.{js,jsx,ts,tsx}',
+    '!app/layout.{js,jsx,ts,tsx}', 
+    '!app/providers.{js,jsx,ts,tsx}',
   ],
+  
+  // Optional: Sets up directory target for generated report files
+  coverageDirectory: 'coverage',
 }

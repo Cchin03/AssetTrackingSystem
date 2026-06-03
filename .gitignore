@@ -37,3 +37,6 @@ CLAUDE.md
 include/
 FETCH_HEAD  
 ngrok.exe
+
+# Prevent the Jest coverage directory from being tracked by Git
+coverage/

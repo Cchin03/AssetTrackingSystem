@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
+    "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
     "test:debug": "jest --detectOpenHandles --forceExit"
   },
