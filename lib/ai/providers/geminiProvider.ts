@@ -161,7 +161,7 @@ Look at this image and determine if it contains ONE of the following recognised 
 - Mouse (computer mouse)
 - Keyboard (computer keyboard)
 
-Respond ONLY in this exact format (no extra text):
+ Respond ONLY in this exact format (no extra text):
 IS_VALID_ASSET: [Yes/No]
 DETECTED_ASSET: [exact asset name from the list above, or "Unknown" if not found]
 REASON: [one sentence explaining your decision]`;

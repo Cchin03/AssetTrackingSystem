@@ -161,7 +161,7 @@ export async function POST(_request: NextRequest) {
             sameSite: 'lax',
             maxAge: 0,
             path: '/'
-        })
+         })
 
         // Clear callback URL cookie if it exists
         // It deletes the stored 'callback URL' used by NextAuth to redirect the 

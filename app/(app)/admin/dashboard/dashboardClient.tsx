@@ -34,6 +34,69 @@ interface DashboardStats {
   totalLocations: number
 }
 
+interface ActivityRow {
+  audit_id: number
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE'
+  record_id: string
+  old_values: Record<string, unknown> | null
+  new_values: Record<string, unknown> | null
+  created_dt: string
+}
+
+// One-line summary of what changed — the full field-by-field diff lives on
+// the main /admin/auditLog page; this widget only needs a compact preview.
+function summarizeChange(row: ActivityRow): string {
+  if (row.action === 'CREATE') {
+    const name = (row.new_values?.name as string) || row.record_id
+    return `${name} created`
+  }
+  if (row.action === 'DELETE') {
+    const name = (row.old_values?.name as string) || row.record_id
+    return `${name} removed`
+  }
+  // UPDATE / RESTORE — find the first field that actually changed
+  const oldValues = row.old_values || {}
+  const newValues = row.new_values || {}
+  const fields = new Set([...Object.keys(oldValues), ...Object.keys(newValues)])
+  fields.delete('updated_dt')
+  fields.delete('created_dt')
+
+  let changedCount = 0
+  let firstField = ''
+  let firstBefore: unknown
+  let firstAfter: unknown
+
+  fields.forEach((field) => {
+    const before = oldValues[field]
+    const after = newValues[field]
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      changedCount++
+      if (!firstField) {
+        firstField = field
+        firstBefore = before
+        firstAfter = after
+      }
+    }
+  })
+
+  if (!firstField) return `${row.record_id} updated`
+  const summary = `${firstField}: ${String(firstBefore)} → ${String(firstAfter)}`
+  return changedCount > 1 ? `${summary} (+${changedCount - 1} more)` : summary
+}
+
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString)
+  const diffMs = Date.now() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  if (diffMins < 1) return 'Just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours}h ago`
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString('en-MY', { day: '2-digit', month: 'short' })
+}
+
 interface DashboardClientProps {
   // The chart is rendered server-side and passed in as a ReactNode.
   // This keeps AssetChartLoader out of the client bundle entirely.
@@ -54,6 +117,8 @@ export default function DashboardClient({ chart, entityView }: DashboardClientPr
   })
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
+  const [recentActivity, setRecentActivity] = useState<ActivityRow[]>([])
+  const [activityLoading, setActivityLoading] = useState(true)
 
   useEffect(() => {
     setMounted(true)
@@ -63,7 +128,21 @@ export default function DashboardClient({ chart, entityView }: DashboardClientPr
     if (!mounted || sessionLoading) return
     if (!session) return
     fetchDashboardData()
+    fetchRecentActivity()
   }, [session, mounted, sessionLoading])
+
+  const fetchRecentActivity = async () => {
+    try {
+      setActivityLoading(true)
+      const res = await fetch('/api/auditLog?page=1&limit=6&sortBy=created_dt&sortOrder=desc')
+      const data = await res.json()
+      setRecentActivity(data.data || [])
+    } catch (error) {
+      console.error('Error fetching recent activity:', error)
+    } finally {
+      setActivityLoading(false)
+    }
+  }
 
   const fetchDashboardData = async () => {
     try {
@@ -244,14 +323,66 @@ export default function DashboardClient({ chart, entityView }: DashboardClientPr
 
             {/* Recent Activity */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Activity</h2>
-              <div className="flex-1 flex items-center justify-center text-center text-gray-500">
-                <div>
-                  <ComputerDesktopIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>Recent activity tracking will be implemented here</p>
-                  <p className="text-sm mt-1">Asset assignments, updates, and system changes</p>
-                </div>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">Recent Activity</h2>
+                <button
+                  onClick={() => router.push('/admin/auditLog')}
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  View all →
+                </button>
               </div>
+
+              {activityLoading ? (
+                <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+                  Loading...
+                </div>
+              ) : recentActivity.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center text-center text-gray-500">
+                  <div>
+                    <ComputerDesktopIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p>No recent activity yet</p>
+                    <p className="text-sm mt-1">Asset assignments, updates, and system changes will show up here</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-gray-600 uppercase border-b border-gray-200">
+                        <th className="pb-2 pr-2 font-medium w-20">Time</th>
+                        <th className="pb-2 pr-2 font-medium w-20">Action</th>
+                        <th className="pb-2 font-medium">Changes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentActivity.map((row) => {
+                        const styles: Record<string, string> = {
+                          CREATE: 'bg-green-100 text-green-800',
+                          UPDATE: 'bg-blue-100 text-blue-800',
+                          DELETE: 'bg-red-100 text-red-800',
+                          RESTORE: 'bg-yellow-100 text-yellow-800',
+                        }
+                        return (
+                          <tr key={row.audit_id} className="border-b border-gray-50 last:border-0">
+                            <td className="py-2 pr-2 text-xs text-gray-500 whitespace-nowrap align-top">
+                              {formatRelativeTime(row.created_dt)}
+                            </td>
+                            <td className="py-2 pr-2 align-top">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${styles[row.action] ?? 'bg-gray-100 text-gray-700'}`}>
+                                {row.action}
+                              </span>
+                            </td>
+                            <td className="py-2 text-xs text-gray-700 truncate max-w-0" title={summarizeChange(row)}>
+                              {summarizeChange(row)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
 

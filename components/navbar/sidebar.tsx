@@ -44,8 +44,11 @@ const adminModules = [
     icon: ComputerDesktopIcon,
     href: '/admin/assetTracking',
     dropdown: [
+      { label: 'Audit Log', path: 'auditLog' },
       { label: 'Assets', path: 'assets' },
       { label: 'Maintenance', path: 'maintainApprove' },
+      { label: 'Bulk Import', path: 'addMoreAssets' }
+
     ],
   },
   // Location module - manage campus locations and their details

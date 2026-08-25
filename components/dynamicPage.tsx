@@ -559,8 +559,11 @@ export default function DynamicPage({ config }: DynamicPageProps) {
           <DataTable
             title={`${config.entityDisplayName} Listing`}
             columns={
-              // When customActions is provided, inject a custom Actions column
-              config.customActions
+              // When customActions has actual entries, inject a custom Actions column.
+              // An empty array (used by read-only pages like the audit log to suppress
+              // Edit/Delete entirely) falls through to the plain config.columns branch
+              // instead of leaving a blank "Actions" header with no buttons in it.
+              config.customActions && config.customActions.length > 0
                 ? [
                     // If a modalConfig is also provided, wrap the asset_id cell so
                     // clicking the thumbnail opens the modal

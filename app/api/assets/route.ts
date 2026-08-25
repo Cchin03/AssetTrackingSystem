@@ -19,6 +19,9 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 // Check whether the user is logged in, authorized and role allowed
 import { validateSession } from '@/lib/apiAuth'
 
+// Best-effort audit logging — records who changed what, and when
+import { logAudit } from '@/lib/auditLog'
+
 // Commented by Desmond @ 26-April-26
 // Import the TypeScript type definitions for the entire Supabase structure
 import type { Database } from '@/lib/supabase/types'
@@ -301,6 +304,16 @@ export async function POST(request: NextRequest) {
       throw error
     }
 
+    // Best-effort audit log — never blocks the response even if it fails
+    await logAudit({
+      tableName: 'Asset',
+      recordId: data.asset_id,
+      action: 'CREATE',
+      oldValues: null,
+      newValues: data,
+      userId: authResult.session?.user?.staffId || null
+    })
+
     // Return a success response when no failure
     return NextResponse.json(
       { success: true, data},
@@ -422,6 +435,22 @@ export async function PUT(request: NextRequest) {
     // Automatically update the 'last modified time'
     updateData.updated_dt = new Date().toISOString() // Convert the date to standard database format
 
+    // Fetch the row's current state before updating — needed as old_values
+    // for the audit log. Also lets us return 404 early if it doesn't exist.
+    const { data: beforeRow, error: beforeError } = await supabaseAdmin
+      .from('Asset')
+      .select('*')
+      .eq('asset_id', asset_id)
+      .is('deleted_dt', null)
+      .single()
+
+    if (beforeError || !beforeRow) {
+      return NextResponse.json(
+        { error: 'Asset not found or already deleted' },
+        { status: 404 }
+      )
+    }
+
     // Build the database query
     const { data, error } = await supabaseAdmin // Supabase returns data and error
       .from('Asset')
@@ -446,6 +475,16 @@ export async function PUT(request: NextRequest) {
         { status: 404 }
       )
     }
+
+    // Best-effort audit log — never blocks the response even if it fails
+    await logAudit({
+      tableName: 'Asset',
+      recordId: asset_id,
+      action: 'UPDATE',
+      oldValues: beforeRow,
+      newValues: data,
+      userId: authResult.session?.user?.staffId || null
+    })
 
     return NextResponse.json( // Success response
       { success: true, data}
@@ -493,6 +532,16 @@ export async function DELETE(request: NextRequest) {
      * Commented by Desmond @ 11-Feb-2026
      * Instead of deleting a record, it sets a deleted_dt to mark it as removed
      */
+
+    // Fetch the row's current state before soft-deleting — needed as
+    // old_values for the audit log.
+    const { data: beforeRow } = await supabaseAdmin
+      .from('Asset')
+      .select('*')
+      .eq('asset_id', asset_id)
+      .is('deleted_dt', null)
+      .single()
+
     const { data, error } = await supabaseAdmin // Create the Supabase connection
       .from('Asset')
       .update(
@@ -514,6 +563,16 @@ export async function DELETE(request: NextRequest) {
         { status: 404 }
       )
     }
+
+    // Best-effort audit log — never blocks the response even if it fails
+    await logAudit({
+      tableName: 'Asset',
+      recordId: asset_id,
+      action: 'DELETE',
+      oldValues: beforeRow ?? null,
+      newValues: data, // now includes the deleted_dt timestamp
+      userId: authResult.session?.user?.staffId || null
+    })
 
     return NextResponse.json({ // Success response
         success: true, 
