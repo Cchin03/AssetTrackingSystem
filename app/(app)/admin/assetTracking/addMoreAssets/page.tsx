@@ -16,7 +16,6 @@
  */
 
 import { useState } from 'react'
-import Link from 'next/link'
 import { useAdminAccess } from '@/hooks/useAdminAccess'
 
 const REQUIRED_COLUMNS = ['asset_id', 'name', 'model', 'category'] as const
