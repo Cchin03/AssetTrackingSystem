@@ -11,7 +11,6 @@
 
 import { signOut } from 'next-auth/react'
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline'
 // Commented by Desmond @ 22-April-26
 // Previously, there is an issue where the logout confirmation modal wouldn't block the screen
@@ -44,8 +43,6 @@ export default function LogoutButton({className = '', text = 'Log Out'}: LogoutB
   // True while the async signout sequence is in progress
   // It will disable the confirm button to prevent double-clicks
   const [signingOut, setSigningOut] = useState(false)
-
-  const router = useRouter()
 
   // ----------------- Escape key handler -----------------
   // Used to close the logout confirmation modal by pressing the ESC key
