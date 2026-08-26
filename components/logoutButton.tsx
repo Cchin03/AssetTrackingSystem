@@ -9,7 +9,7 @@
  * to prevent accidental sign outs.
  */
 
-// import { signOut } from 'next-auth/react'
+import { signOut } from 'next-auth/react'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline'
@@ -82,38 +82,20 @@ export default function LogoutButton({className = '', text = 'Log Out'}: LogoutB
   // 3. Call next-auth's signOut() which clears the cookie and redirect user to /login
   // The API call is best-effort so even if it fails, we still sign out using next-auth
   // Moreover, the user should never be stuck on the app because the DB call failed
-  const confirmLogout = async () => {
-    setSigningOut(true) // Disables the logout button while signing out
+const confirmLogout = async () => {
+    setSigningOut(true)
     try {
-      // Step 1: Clear the client-side session data
       try {
-        // Clear the lastPath so toast shows on next login
         sessionStorage.removeItem('lastPath')
-        // Remove any stored session
         localStorage.removeItem('userSession')
-      // Catch the errors
       } catch {
-        // Catch non-fatal error here
+        // non-fatal
       }
 
-      // Tell the server to mark the session as ended
-      //  - Call the API to end the session in the database
-      // Even if this fails, we still sign out the user
-
-      // Commented by Desmond @ 3-May-26
-      // This is from an old method where sessions were stored in a Supabase table
-      // await fetch('/api/sessions/end', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      // })
-
+      // Step 1: Clear your custom cookie/session via your own API
       const logout = await fetch('/api/auth/logout', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include'
       })
 
@@ -121,36 +103,25 @@ export default function LogoutButton({className = '', text = 'Log Out'}: LogoutB
         throw new Error(`Logout failed with status ${logout.status}`)
       }
 
-      // Sign out from NextAuth and redirect the user to the login page
+      // Step 2: Let NextAuth clear its own session/CSRF/callback cookies correctly
+      await signOut({ redirect: false })
 
-      // Commented by Desmond @ 3-May-26
-      // Instead of redirecting the user to /login, use router.replace()
-      // so that user cannot go back to the previous page 
-      // await signOut(
-      //   { 
-      //     callbackUrl: '/login', 
-      //     redirect: true 
-      //   }
-      // )
-      const data = await logout.json()
+      // Step 3: Clear Microsoft's SSO session too, then land on /login
+      window.location.href =
+        "https://login.microsoftonline.com/common/oauth2/v2.0/logout?post_logout_redirect_uri=" +
+        encodeURIComponent(window.location.origin + "/login")
 
-      router.replace(data.redirectTo || '/login')
-      router.refresh()
-
-    // Catch the errors
     } catch (error) {
-      // Log the error to console
       console.error('Logout failed:', error)
-      // Fallback: Just sign out
-      // await signOut(
-      //   { 
-      //     callbackUrl: '/login', 
-      //     redirect: true 
-      //   }
-      // )
-
-      router.replace('/login')
-
+      // Fallback: still try to clear NextAuth session and go to Microsoft logout
+      try {
+        await signOut({ redirect: false })
+      } catch {
+        // ignore
+      }
+      window.location.href =
+        "https://login.microsoftonline.com/common/oauth2/v2.0/logout?post_logout_redirect_uri=" +
+        encodeURIComponent(window.location.origin + "/login")
     } finally {
       setSigningOut(false)
     }
