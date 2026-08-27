@@ -1,5 +1,6 @@
 'use client'
 import React, { useState, useEffect, useRef } from "react"
+import { useSession } from 'next-auth/react'
 import type { Database } from '@/lib/supabase/types'
 // Removed direct Supabase client import — all database calls now go through API routes
 // to prevent table names and queries from leaking in the browser Network tab
@@ -87,6 +88,14 @@ export default function ConfirmationContent({
   }) => Promise<void>;
   parentScan: { type: string; id: string; name: string } | null;
 }) {
+  // Logged-in user's staff ID, used to attribute audit log entries (WC)
+  const { data: session } = useSession()
+  const staffId = (session?.user as any)?.staffId ?? null
+
+  // Guards against a fast double-tap/double-click firing two submissions
+  // before the isSubmitting state has re-rendered and disabled the button (WC)
+  const isSubmittingRef = useRef(false);
+
   // State variables (WC)
   const [mode, setMode] = useState<'loading' | 'editing' | 'registering' | 'error'>('loading');
   const [assetDetails, setAssetDetails] = useState<Asset | null>(null);
@@ -320,7 +329,7 @@ export default function ConfirmationContent({
           image: base64,
           assetId: assetDetails?.asset_id || item.code,
           locationId: selectedLocation || null,
-          userId: null,
+          userId: staffId,
           mimeType: mime,
         }),
       });
@@ -371,7 +380,7 @@ export default function ConfirmationContent({
         ai_response: payload.ai_response,
         image_base64,
         image_mime,
-        assessed_by: null,
+        assessed_by: staffId,
       }),
     });
     // The API returns { success: boolean, error?: string },
@@ -387,23 +396,33 @@ export default function ConfirmationContent({
   //  Manual submit handler, validate inputs, call saveToDb, 
   // and then call onSubmit with the result to go back to success page (WC)
   const handleManualSubmit = async () => {
+    // Guard against a fast double-tap/click firing this twice before
+    // isSubmitting re-renders and disables the button (WC)
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+
     setManualError(null); setAiSubmitError(null);
 
     if (!selectedLocation) {
-      setManualError('Please select a location before submitting.'); scrollToError(); return;
+      setManualError('Please select a location before submitting.'); scrollToError();
+      isSubmittingRef.current = false; return;
     }
     if (!selectedDepartment) {
-      setManualError('Please select a department before submitting.'); scrollToError(); return;
+      setManualError('Please select a department before submitting.'); scrollToError();
+      isSubmittingRef.current = false; return;
     }
     if (maintenanceNeeded) {
       if (priority === 'none') {
-        setManualError('Please select a priority level since maintenance is needed.'); scrollToError(); return;
+        setManualError('Please select a priority level since maintenance is needed.'); scrollToError();
+        isSubmittingRef.current = false; return;
       }
       if (!feedback.trim() || countWords(feedback) === 0) {
-        setManualError('Please enter staff feedback before submitting.'); scrollToError(); return;
+        setManualError('Please enter staff feedback before submitting.'); scrollToError();
+        isSubmittingRef.current = false; return;
       }
       if (!imageFile) {
-        setManualError('Please upload a photo of the asset since maintenance is needed.'); scrollToError(); return;
+        setManualError('Please upload a photo of the asset since maintenance is needed.'); scrollToError();
+        isSubmittingRef.current = false; return;
       }
     }
     // Call saveToDb with the assessment data and image, the API will handle saving to database and storage (WC)
@@ -432,20 +451,25 @@ export default function ConfirmationContent({
     // Catch any unexpected errors that occur during the save process, such as network errors, 
     // and show a generic error message (WC)
     catch { setManualError('Unexpected error. Check your connection.'); scrollToError(); } 
-    finally  { setIsSubmitting(false); }
+    finally  { setIsSubmitting(false); isSubmittingRef.current = false; }
   };
 
   // AI submit handler, similar to manual submit but uses AI result,
   // validate that AI result exists and required fields are selected (WC)
   const handleAiSubmit = async () => {
     if (!aiResult || isSubmitting) return;
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+
     setManualError(null); setAiSubmitError(null);
 
     if (!selectedLocation) {
-      setAiSubmitError('Please select a location before submitting.'); scrollToError(); return;
+      setAiSubmitError('Please select a location before submitting.'); scrollToError();
+      isSubmittingRef.current = false; return;
     }
     if (!selectedDepartment) {
-      setAiSubmitError('Please select a department before submitting.'); scrollToError(); return;
+      setAiSubmitError('Please select a department before submitting.'); scrollToError();
+      isSubmittingRef.current = false; return;
     }
 
     setIsSubmitting(true);
@@ -471,7 +495,7 @@ export default function ConfirmationContent({
         submitType: 'ai',
       });
     } catch { setAiSubmitError('Unexpected error. Check your connection.'); scrollToError(); }
-    finally  { setIsSubmitting(false); }
+    finally  { setIsSubmitting(false); isSubmittingRef.current = false; }
   };
 
   // Registration submit handler, validate inputs, call onCreate to create new asset (WC)

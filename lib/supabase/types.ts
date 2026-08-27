@@ -340,7 +340,7 @@ export interface Database {
                     new_values: Json | null
                     user_id: string | null
                     created_dt: string
-                    reason: string | null
+                    reason?: string | null
                 }
                 Insert: {
                     audit_id?: number

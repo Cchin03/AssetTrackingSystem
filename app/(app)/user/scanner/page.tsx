@@ -1037,50 +1037,20 @@ export default function ScannerPage() {
   //                    Asset confirmation handlers
   // ----------------------------------------------------------------------
   const handleAssetUpdate = async (newData: Record<string, unknown>) => {
-    // 
     if (!scannedItem || type !== 'asset') {
       // TODO: How can we improve this by providing more context to the user?
-       alert("Error")
-       // Exit early
-       return
+      alert("Error")
+      // Exit early
+      return
     }
 
     try {
-      // const dataToUpdate = {
-      //   condition: newData.condition,
-      //   location_id: newData.location_id,
-      //   department_id: newData.department_id,
-      //   updated_dt: new Date().toISOString()
-      // };
-
-      // const result = await scannerFetch.post({
-      //   action: 'tag_asset',
-      //   assetId: scannedItem.code,
-      //   field: 'location_id', 
-      //   value: newData.location_id,
-      // });
-
-      // if (!result.success) throw new Error(result.error || 'Update failed');
-
-      // Update the asset details in the database by sending a POST request to the backend API
-      await scannerFetch.post({
-        action: 'tag_asset',
-        assetId: scannedItem.code,
-        field: 'location_id',
-        value: newData.location_id
-      })
-
-      await fetch(`/api/assets/${scannedItem.code}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        // body: JSON.stringify(dataToUpdate),
-        body: JSON.stringify({
-          condition: newData.condition,
-          location_id: newData.location_id,
-          department_id: newData.department_id,
-          updated_dt: newData.updated_dt
-        })
-      })
+      // Note: the actual database write (asset condition/location/department
+      // update + audit log entry) already happens in ConfirmationContent's
+      // saveToDb() call to /api/saveMaintenance, before onSubmit fires.
+      // This handler should only reflect the result in the UI — it must NOT
+      // perform another write, or the asset gets updated twice and the
+      // audit log gets a duplicate "no changes" entry.
 
       // After successful update, set the submitted data to show in the success page
       setSubmittedData({ 
