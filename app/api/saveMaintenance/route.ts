@@ -2,6 +2,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 
+// Mirrors the parseAiPoints() helper used on the Maintenance Review page
+// (app/(app)/admin/.../maintenance/page.tsx), so the AuditLog "reason" shown
+// for AI-assessed updates matches the same short, bullet-style summary
+// instead of dumping the full AI paragraph. (WC)
+function parseAiPoints(text: string): string[] {
+  if (!text) return []
+  const issuesSection = text.split(/ISSUES:/i)[1]
+  if (issuesSection) {
+    const points = issuesSection
+      .split('\n')
+      .map(l => l.replace(/^[\s\-•*]+/, '').trim())
+      .filter(l => l.length > 3)
+    if (points.length > 0) return points.slice(0, 3)
+  }
+  return text
+    .split(/[\n\r]+/)
+    .map(l => l.replace(/^[\s\-•*\d.]+/, '').trim())
+    .filter(l => l.length > 10 && l.length < 120)
+    .slice(0, 3)
+}
+
+// Builds a short, human-readable reason string from the AI response,
+// e.g. "Screen has visible cracks; Hinge is loose" (WC)
+function summarizeAiResponse(aiResponse: string | null | undefined): string | null {
+  if (!aiResponse) return null
+  const points = parseAiPoints(aiResponse)
+  return points.length > 0 ? points.join('; ') : null
+}
+
 export async function POST(req: NextRequest) {
   // This route handles saving maintenance assessments (WC)
   try {
@@ -142,7 +171,7 @@ export async function POST(req: NextRequest) {
             location_id: location_id ?? null,
             department_id: department_id ?? null,
           },
-          reason: feedback ?? ai_response ?? null,
+          reason: feedback ?? summarizeAiResponse(ai_response) ?? null,
           user_id: assessed_by ?? null,
         });
 
