@@ -1,5 +1,7 @@
 // app/api/auditLog/route.ts
-// Read-only audit log listing — admins can browse who changed what, when.
+// Admins can browse who changed what, when (GET). Server-side code can also
+// write new audit entries (POST) whenever a tracked table is created, updated,
+// deleted, or restored.
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { validateSession } from '@/lib/apiAuth'
@@ -59,5 +61,64 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('GET /api/auditLog error:', { message: error?.message })
     return NextResponse.json({ error: 'Failed to fetch audit log' }, { status: 500 })
+  }
+}
+
+// ----------------------------------------------------------------
+//                     POST /api/auditLog
+// ----------------------------------------------------------------
+// Inserts a new audit trail entry. Intended to be called from OTHER
+// server-side API routes (e.g. saveMaintenance) right after a tracked
+// table is modified — not directly from the client.
+//
+// Body shape:
+// {
+//   table_name: string   (required, max 50 chars, e.g. "Asset")
+//   record_id: string    (required, max 30 chars, e.g. the asset_id)
+//   action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE'  (required)
+//   old_values?: object | null   (jsonb — state before the change)
+//   new_values?: object | null   (jsonb — state after the change)
+//   reason?: string | null
+//   user_id?: string | null      (must match an existing Staff.staff_id, or null)
+// }
+export async function POST(request: NextRequest) {
+  // Any authenticated staff member can trigger a log entry (the action itself
+  // is what's restricted elsewhere, e.g. by validateSession() in the route
+  // that performs the actual update). Adjust the role here if you want to
+  // lock this down further.
+  const authResult = await validateSession()
+  if (!authResult.authorized) return authResult.response
+
+  try {
+    const body = await request.json()
+    const { table_name, record_id, action, old_values, new_values, reason, user_id } = body
+
+    if (!table_name || !record_id || !isValidAction(action)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid audit log payload: table_name, record_id, and a valid action are required' },
+        { status: 400 }
+      )
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('AuditLog')
+      .insert({
+        table_name: String(table_name).slice(0, 50),
+        record_id: String(record_id).slice(0, 30),
+        action,
+        old_values: old_values ?? null,
+        new_values: new_values ?? null,
+        reason: reason ?? null,
+        user_id: user_id ?? null,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    return NextResponse.json({ success: true, data })
+  } catch (error: any) {
+    console.error('POST /api/auditLog error:', { message: error?.message })
+    return NextResponse.json({ success: false, error: 'Failed to write audit log' }, { status: 500 })
   }
 }

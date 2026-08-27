@@ -105,6 +105,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Fetch the asset's current state BEFORE updating it, so we can record
+    // old vs. new values in the audit log (WC)
+    const { data: assetBefore } = await supabaseAdmin
+      .from('Asset')
+      .select('condition, location_id, department_id')
+      .eq('asset_id', asset_id)
+      .single();
+
     // Update asset condition (WC)
     const { error: updateError } = await supabaseAdmin
       .from('Asset')
@@ -118,6 +126,32 @@ export async function POST(req: NextRequest) {
 
     if (updateError) {
       console.error('Error updating asset condition:', updateError.message);
+    } else {
+      // Write an AuditLog entry now that the asset update has succeeded.
+      // This is best-effort — a failure here should NOT fail the whole
+      // request, since the maintenance assessment itself already saved
+      // successfully (WC)
+      try {
+        const { error: auditError } = await supabaseAdmin.from('AuditLog').insert({
+          table_name: 'Asset',
+          record_id: asset_id,
+          action: 'UPDATE',
+          old_values: assetBefore ?? null,
+          new_values: {
+            condition: condition_status,
+            location_id: location_id ?? null,
+            department_id: department_id ?? null,
+          },
+          reason: feedback ?? null,
+          user_id: assessed_by ?? null,
+        });
+
+        if (auditError) {
+          console.error('Failed to write audit log:', auditError.message);
+        }
+      } catch (auditErr) {
+        console.error('Unexpected error writing audit log:', auditErr);
+      }
     }
     // Even if asset update fails, we still return success for the assessment save, since the main purpose of this route is to save the maintenance assessment.
     //  The asset update is a secondary action that we attempt but don't want to cause the whole operation to fail if it doesn't work (WC)
