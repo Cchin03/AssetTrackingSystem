@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
             location_id: location_id ?? null,
             department_id: department_id ?? null,
           },
-          reason: feedback ?? null,
+          reason: feedback ?? ai_response ?? null,
           user_id: assessed_by ?? null,
         });
 
