@@ -23,12 +23,27 @@ function parseAiPoints(text: string): string[] {
     .slice(0, 3)
 }
 
-// Builds a short, human-readable reason string from the AI response,
-// e.g. "Screen has visible cracks; Hinge is loose" (WC)
+// Builds a short, bullet-point reason string from the AI response,
+// prefixed so it's clear in the audit log this came from an AI assessment
+// rather than staff typing, e.g.:
+// "[AI Assessment]\n• Screen has visible cracks\n• Hinge is loose" (WC)
 function summarizeAiResponse(aiResponse: string | null | undefined): string | null {
   if (!aiResponse) return null
   const points = parseAiPoints(aiResponse)
-  return points.length > 0 ? points.join('; ') : null
+  if (points.length === 0) return null
+  return `[AI Assessment]\n${points.map(p => `• ${p}`).join('\n')}`
+}
+
+// Builds the final AuditLog "reason" value, labelling whether the update
+// came from manual staff feedback or an AI assessment (WC)
+function buildAuditReason(
+  feedback: string | null | undefined,
+  ai_response: string | null | undefined
+): string | null {
+  if (feedback && feedback.trim()) {
+    return `[Manual] ${feedback.trim()}`
+  }
+  return summarizeAiResponse(ai_response)
 }
 
 export async function POST(req: NextRequest) {
@@ -171,7 +186,7 @@ export async function POST(req: NextRequest) {
             location_id: location_id ?? null,
             department_id: department_id ?? null,
           },
-          reason: feedback ?? summarizeAiResponse(ai_response) ?? null,
+          reason: buildAuditReason(feedback, ai_response),
           user_id: assessed_by ?? null,
         });
 
