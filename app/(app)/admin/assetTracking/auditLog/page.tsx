@@ -46,6 +46,74 @@ function formatCellValue(value: unknown): string {
   return String(value)
 }
 
+// Parses the "[Manual] ..." / "[AI Assessment]\n• ..." prefix that
+// saveMaintenance writes into AuditLog.reason, so this column can show the
+// same colored badge + bullet-point style as the Maintenance Review page's
+// Response column, instead of a raw unlabeled string.
+function parseReason(reason: string | null | undefined): {
+  source: 'manual' | 'ai' | null
+  text: string
+  points: string[]
+} {
+  if (!reason) return { source: null, text: '', points: [] }
+
+  if (reason.startsWith('[Manual]')) {
+    return { source: 'manual', text: reason.replace('[Manual]', '').trim(), points: [] }
+  }
+
+  if (reason.startsWith('[AI Assessment]')) {
+    const body = reason.replace('[AI Assessment]', '').trim()
+    const points = body
+      .split('\n')
+      .map((line) => line.replace(/^[\s•\-*]+/, '').trim())
+      .filter(Boolean)
+    return { source: 'ai', text: body, points }
+  }
+
+  // Older entries written before the prefix was added — show as plain text
+  return { source: null, text: reason, points: [] }
+}
+
+function ReasonCell({ reason }: { reason: string | null | undefined }) {
+  const { source, text, points } = parseReason(reason)
+
+  if (!source) {
+    return text ? (
+      <span className="text-gray-700 text-xs">{text}</span>
+    ) : (
+      <span className="text-gray-400 italic text-xs">No reason given</span>
+    )
+  }
+
+  if (source === 'ai') {
+    return (
+      <div style={{ maxWidth: '220px' }} className="flex flex-col gap-1.5">
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full px-2 py-0.5 w-fit">
+          AI Response
+        </span>
+        <ul className="space-y-1">
+          {points.length > 0 ? points.map((point, i) => (
+            <li key={i} className="flex items-start gap-1.5">
+              <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-red-400 flex-shrink-0" />
+              <span className="text-xs text-gray-700 leading-snug">{point}</span>
+            </li>
+          )) : <li className="text-xs text-gray-400 italic">No details</li>}
+        </ul>
+      </div>
+    )
+  }
+
+  // source === 'manual'
+  return (
+    <div style={{ maxWidth: '220px' }} className="flex flex-col gap-1.5">
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 w-fit">
+        Staff feedback
+      </span>
+      <p className="text-xs text-gray-700 leading-snug">{text}</p>
+    </div>
+  )
+}
+
 // Each row gets its own expand/collapse state since this is a real component
 // (not just a render function) — clicking "Show more" on one row doesn't
 // affect any other row.
@@ -151,14 +219,7 @@ const auditLogConfig: dynamicPageConfig = {
       key: 'reason',
       label: 'Reason',
       sortable: false,
-      render: (v) => {
-        const reason = v as string | null | undefined
-        return reason ? (
-          <span className="text-gray-700 text-xs">{reason}</span>
-        ) : (
-          <span className="text-gray-400 italic text-xs">No reason given</span>
-        )
-      },
+      render: (v) => <ReasonCell reason={v as string | null | undefined} />,
     },
     {
       // Readable, expandable diff — what actually changed
