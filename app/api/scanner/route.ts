@@ -23,6 +23,10 @@ import { z } from 'zod'
 // Import the TypeScript type definitions for the entire Supabase structure
 import type { Database } from '@/lib/supabase/types'
 
+// Shared audit logging helper — same one used by app/api/assets/route.ts,
+// so CREATE/UPDATE/DELETE entries are written consistently across routes (WC)
+import { logAudit } from '@/lib/auditLog'
+
 // ============================================================
 // ZOD SCHEMAS — define what data each action expects
 // ============================================================
@@ -78,13 +82,6 @@ const CreateAssetSchema = z.object({
   model: z.string().min(1).max(30).trim(),
   location_id: z.string().max(30).nullable().optional(),
   department_id: z.string().max(30).nullable().optional(),
-  // Optional photo captured during registration — uploaded to the
-  // AssetImage storage bucket and its URL saved into Asset.tag_path (WC)
-  image_base64: z.string().nullable().optional(),
-  image_mime: z.string().nullable().optional(),
-  // Staff member registering the asset, so the AuditLog CREATE entry
-  // can attribute who created it (WC)
-  created_by: z.string().nullable().optional(),
 })
 
 // ============================================================
@@ -306,85 +303,58 @@ export async function POST(req: NextRequest) {
     const parsed = CreateAssetSchema.safeParse(body)
     if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
 
-    // Pull out fields that don't belong in the Asset insert itself —
-    // 'action' is routing metadata, image_base64/image_mime are uploaded
-    // separately below, and created_by is only used for the AuditLog entry (WC)
-    const { action: _, image_base64, image_mime, created_by, ...assetData } = parsed.data
+    const { action: _, ...assetData } = parsed.data // remove 'action' field before inserting
 
-    // Upload the registration photo (if provided) BEFORE inserting the
-    // asset, same pattern as saveMaintenance — bucket is shared (AssetImage) (WC)
+    // Generate and upload the Code128 barcode PNG for this asset — same
+    // helper and 'assets' folder used by the admin Add Asset flow
+    // (app/api/assets/route.ts), so scanner-registered assets get a
+    // barcode graphic in the Assets listing just like manually-added ones.
+    // Best-effort: if generation fails, tag_path stays null rather than
+    // blocking asset creation (WC)
     let tagPath: string | null = null
-    if (image_base64) {
-      try {
-        const buffer = Buffer.from(image_base64, 'base64')
-        const ext = image_mime === 'image/png' ? 'png' : image_mime === 'image/webp' ? 'webp' : 'jpg'
-        const fileName = `${assetData.asset_id}_${Date.now()}.${ext}`
-
-        const { error: uploadError } = await supabaseAdmin
-          .storage
-          .from('AssetImage')
-          .upload(fileName, buffer, {
-            contentType: image_mime ?? 'image/jpeg',
-            upsert: false,
-          })
-
-        if (uploadError) {
-          console.error('Asset registration image upload error:', uploadError)
-        } else {
-          const { data: urlData } = supabaseAdmin
-            .storage
-            .from('AssetImage')
-            .getPublicUrl(fileName)
-          tagPath = urlData.publicUrl
-        }
-      } catch (err) {
-        console.error('Unexpected error uploading asset registration image:', err)
-        // Image upload failing shouldn't block asset creation — continue without it (WC)
-      }
+    try {
+      const { generateAndUploadBarcode } = await import('@/lib/barcode/barcode')
+      const barcodeResult = await generateAndUploadBarcode(assetData.asset_id, 'assets', assetData.name)
+      tagPath = barcodeResult.tagPath
+    } catch (barcodeError) {
+      console.error('Barcode generation failed (continuing):', {
+        assetId: assetData.asset_id.substring(0, 10),
+        error: (barcodeError as Error).message,
+      })
     }
 
-    const { error } = await supabaseAdmin
+    // Attribute the creation to the logged-in user via their validated
+    // session, not a client-supplied field (can't be spoofed) (WC)
+    const staffId = auth.session?.user?.staffId ?? null
+
+    const { data, error } = await supabaseAdmin
       .from('Asset')
       .insert({
         ...assetData,
         tag_path: tagPath,
-        created_by: created_by ?? null,
+        created_by: staffId,
         created_dt: new Date().toISOString(),
       })
+      .select()
+      .single()
 
     if (error) {
       console.error({ message: error.message })
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
 
-    // Log the new asset in AuditLog — best-effort, doesn't fail the
-    // request if it errors, since the asset itself is already saved (WC)
-    try {
-      const { error: auditError } = await supabaseAdmin.from('AuditLog').insert({
-        table_name: 'Asset',
-        record_id: assetData.asset_id,
-        action: 'CREATE',
-        old_values: null,
-        new_values: {
-          name: assetData.name,
-          category: assetData.category,
-          model: assetData.model,
-          condition: assetData.condition,
-          location_id: assetData.location_id ?? null,
-          department_id: assetData.department_id ?? null,
-        },
-        reason: null,
-        user_id: created_by ?? null,
-      })
+    // Best-effort audit log — never blocks the response even if it fails,
+    // uses the same shared helper as app/api/assets/route.ts (WC)
+    await logAudit({
+      tableName: 'Asset',
+      recordId: assetData.asset_id,
+      action: 'CREATE',
+      oldValues: null,
+      newValues: data,
+      userId: staffId,
+    })
 
-      if (auditError) {
-        console.error('Failed to write audit log for asset creation:', auditError.message)
-      }
-    } catch (auditErr) {
-      console.error('Unexpected error writing audit log:', auditErr)
-    }
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, data })
   }
 
   // If action doesn't match any known operation

@@ -85,8 +85,6 @@ export default function ConfirmationContent({
     name: string; description: string; condition: string;
     location_id: string | null; department_id: string | null;
     category: string; model: string;
-    image_base64: string | null; image_mime: string | null;
-    created_by: string | null;
   }) => Promise<void>;
   parentScan: { type: string; id: string; name: string } | null;
 }) {
@@ -507,25 +505,11 @@ export default function ConfirmationContent({
       alert('Please fill in all required fields: Asset Name, Category, and Model.');
       return;
     }
-
-    // Encode the captured/uploaded photo (if any) so it can be uploaded
-    // to the AssetImage bucket by the scanner API route (WC)
-    let image_base64: string | null = null;
-    let image_mime: string | null = null;
-    if (imageFile) {
-      const enc = await encodeImage(imageFile);
-      image_base64 = enc.base64;
-      image_mime = enc.mime;
-    }
-
     await onCreate({
       name: newName, description: newDescription, condition: registerCondition,
       location_id: selectedLocation || null,
       department_id: selectedDepartment || null,
       category: newCategory, model: newModel,
-      image_base64,
-      image_mime,
-      created_by: staffId,
     });
   };
 
