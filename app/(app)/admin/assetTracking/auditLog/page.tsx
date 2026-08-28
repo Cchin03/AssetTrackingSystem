@@ -95,7 +95,7 @@ function ReasonCell({ reason }: { reason: string | null | undefined }) {
           {points.length > 0 ? points.map((point, i) => (
             <li key={i} className="flex items-start gap-1.5">
               <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-red-400 flex-shrink-0" />
-              <span className="text-xs text-gray-700 leading-snug">{point}</span>
+              <span className="text-xs text-gray-700 leading-snug line-clamp-2">{point}</span>
             </li>
           )) : <li className="text-xs text-gray-400 italic">No details</li>}
         </ul>
@@ -109,7 +109,7 @@ function ReasonCell({ reason }: { reason: string | null | undefined }) {
       <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 w-fit">
         Staff feedback
       </span>
-      <p className="text-xs text-gray-700 leading-snug">{text}</p>
+      <p className="text-xs text-gray-700 leading-snug line-clamp-3">{text}</p>
     </div>
   )
 }
