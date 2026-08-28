@@ -1099,6 +1099,12 @@ export default function ScannerPage() {
         location_id: newData.location_id,
         // department the asset belongs to
         department_id: newData.department_id,
+        // registration photo (if captured) — uploaded server-side to the
+        // AssetImage bucket and saved into Asset.tag_path (WC)
+        image_base64: newData.image_base64 ?? null,
+        image_mime: newData.image_mime ?? null,
+        // logged-in staff member registering this asset, for the AuditLog entry (WC)
+        created_by: newData.created_by ?? null,
       }
 
       // If we have a parent context from being redirected to the application

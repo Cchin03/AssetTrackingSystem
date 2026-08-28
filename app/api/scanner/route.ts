@@ -78,6 +78,13 @@ const CreateAssetSchema = z.object({
   model: z.string().min(1).max(30).trim(),
   location_id: z.string().max(30).nullable().optional(),
   department_id: z.string().max(30).nullable().optional(),
+  // Optional photo captured during registration — uploaded to the
+  // AssetImage storage bucket and its URL saved into Asset.tag_path (WC)
+  image_base64: z.string().nullable().optional(),
+  image_mime: z.string().nullable().optional(),
+  // Staff member registering the asset, so the AuditLog CREATE entry
+  // can attribute who created it (WC)
+  created_by: z.string().nullable().optional(),
 })
 
 // ============================================================
@@ -299,14 +306,82 @@ export async function POST(req: NextRequest) {
     const parsed = CreateAssetSchema.safeParse(body)
     if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
 
-    const { action: _, ...assetData } = parsed.data // remove 'action' field before inserting
+    // Pull out fields that don't belong in the Asset insert itself —
+    // 'action' is routing metadata, image_base64/image_mime are uploaded
+    // separately below, and created_by is only used for the AuditLog entry (WC)
+    const { action: _, image_base64, image_mime, created_by, ...assetData } = parsed.data
+
+    // Upload the registration photo (if provided) BEFORE inserting the
+    // asset, same pattern as saveMaintenance — bucket is shared (AssetImage) (WC)
+    let tagPath: string | null = null
+    if (image_base64) {
+      try {
+        const buffer = Buffer.from(image_base64, 'base64')
+        const ext = image_mime === 'image/png' ? 'png' : image_mime === 'image/webp' ? 'webp' : 'jpg'
+        const fileName = `${assetData.asset_id}_${Date.now()}.${ext}`
+
+        const { error: uploadError } = await supabaseAdmin
+          .storage
+          .from('AssetImage')
+          .upload(fileName, buffer, {
+            contentType: image_mime ?? 'image/jpeg',
+            upsert: false,
+          })
+
+        if (uploadError) {
+          console.error('Asset registration image upload error:', uploadError)
+        } else {
+          const { data: urlData } = supabaseAdmin
+            .storage
+            .from('AssetImage')
+            .getPublicUrl(fileName)
+          tagPath = urlData.publicUrl
+        }
+      } catch (err) {
+        console.error('Unexpected error uploading asset registration image:', err)
+        // Image upload failing shouldn't block asset creation — continue without it (WC)
+      }
+    }
+
     const { error } = await supabaseAdmin
       .from('Asset')
-      .insert({ ...assetData, created_dt: new Date().toISOString() })
+      .insert({
+        ...assetData,
+        tag_path: tagPath,
+        created_by: created_by ?? null,
+        created_dt: new Date().toISOString(),
+      })
 
     if (error) {
       console.error({ message: error.message })
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    }
+
+    // Log the new asset in AuditLog — best-effort, doesn't fail the
+    // request if it errors, since the asset itself is already saved (WC)
+    try {
+      const { error: auditError } = await supabaseAdmin.from('AuditLog').insert({
+        table_name: 'Asset',
+        record_id: assetData.asset_id,
+        action: 'CREATE',
+        old_values: null,
+        new_values: {
+          name: assetData.name,
+          category: assetData.category,
+          model: assetData.model,
+          condition: assetData.condition,
+          location_id: assetData.location_id ?? null,
+          department_id: assetData.department_id ?? null,
+        },
+        reason: null,
+        user_id: created_by ?? null,
+      })
+
+      if (auditError) {
+        console.error('Failed to write audit log for asset creation:', auditError.message)
+      }
+    } catch (auditErr) {
+      console.error('Unexpected error writing audit log:', auditErr)
     }
 
     return NextResponse.json({ success: true })
