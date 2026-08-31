@@ -23,10 +23,6 @@ import { z } from 'zod'
 // Import the TypeScript type definitions for the entire Supabase structure
 import type { Database } from '@/lib/supabase/types'
 
-// Shared audit logging helper — same one used by app/api/assets/route.ts,
-// so CREATE/UPDATE/DELETE entries are written consistently across routes (WC)
-import { logAudit } from '@/lib/auditLog'
-
 // ============================================================
 // ZOD SCHEMAS — define what data each action expects
 // ============================================================
@@ -343,16 +339,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
 
-    // Best-effort audit log — never blocks the response even if it fails,
-    // uses the same shared helper as app/api/assets/route.ts (WC)
-    await logAudit({
-      tableName: 'Asset',
-      recordId: assetData.asset_id,
-      action: 'CREATE',
-      oldValues: null,
-      newValues: data,
-      userId: staffId,
-    })
+    // Best-effort audit log — never blocks the response even if it fails.
+    // Raw insert (not logAudit) so we can include a reason, matching the
+    // same "New asset registered" text used by the admin Add Asset flow
+    // in app/api/assets/route.ts (WC)
+    try {
+      const { error: auditError } = await supabaseAdmin.from('AuditLog').insert({
+        table_name: 'Asset',
+        record_id: assetData.asset_id,
+        action: 'CREATE',
+        old_values: null,
+        new_values: data,
+        reason: 'New asset registered',
+        user_id: staffId,
+      })
+      if (auditError) {
+        console.error('Failed to write audit log for asset creation:', auditError.message)
+      }
+    } catch (auditErr) {
+      console.error('Unexpected error writing audit log:', auditErr)
+    }
 
     return NextResponse.json({ success: true, data })
   }

@@ -135,6 +135,11 @@ export async function GET(request: NextRequest) {
 
     const sortOrder = searchParams.get('sortOrder') === 'asc' ? 'asc' : 'desc'
 
+    // When ?deleted=true is passed, show only soft-deleted assets instead
+    // of active ones — powers the "Deleted Assets" admin view so staff can
+    // find and restore something that was removed by mistake (WC)
+    const showDeleted = searchParams.get('deleted') === 'true'
+
     // Build database query
     let query = supabaseAdmin // Use Supabase admin to query the table
       .from('Asset') // Fetch from Asset table
@@ -153,7 +158,11 @@ export async function GET(request: NextRequest) {
        * This line ensure only records with 'deleted_dt' empty/NULL
        * will be shown when queried.
        */
-      .is('deleted_dt', null) // Only show records with no 'deleted_dt' to hide deleted records
+      // Toggle based on showDeleted — active assets (deleted_dt IS NULL) vs.
+      // soft-deleted assets (deleted_dt IS NOT NULL) (WC)
+    query = showDeleted
+      ? query.not('deleted_dt', 'is', null)
+      : query.is('deleted_dt', null)
 
     // Apply condition filter
     if (condition && isValidCondition(condition)) {
@@ -304,15 +313,25 @@ export async function POST(request: NextRequest) {
       throw error
     }
 
-    // Best-effort audit log — never blocks the response even if it fails
-    await logAudit({
-      tableName: 'Asset',
-      recordId: data.asset_id,
-      action: 'CREATE',
-      oldValues: null,
-      newValues: data,
-      userId: authResult.session?.user?.staffId || null
-    })
+    // Best-effort audit log — never blocks the response even if it fails.
+    // Raw insert (not logAudit) so we can include a reason — logAudit's
+    // helper signature doesn't expose that field (WC)
+    try {
+      const { error: auditError } = await supabaseAdmin.from('AuditLog').insert({
+        table_name: 'Asset',
+        record_id: data.asset_id,
+        action: 'CREATE',
+        old_values: null,
+        new_values: data,
+        reason: 'New asset registered',
+        user_id: authResult.session?.user?.staffId || null,
+      })
+      if (auditError) {
+        console.error('Failed to write audit log for asset creation:', auditError.message)
+      }
+    } catch (auditErr) {
+      console.error('Unexpected error writing audit log:', auditErr)
+    }
 
     // Return a success response when no failure
     return NextResponse.json(
@@ -524,6 +543,17 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    // Read the optional deletion reason sent by dynamicPage.tsx's delete
+    // prompt. DELETE requests can carry a JSON body — parse defensively
+    // since older clients (or curl/Postman testing) may send none at all (WC)
+    let reason: string | null = null
+    try {
+      const body = await request.json()
+      reason = typeof body?.reason === 'string' ? body.reason.trim() || null : null
+    } catch {
+      // No body sent — proceed with reason: null
+    }
+
     // const { error } = await supabaseAdmin
     //   .from('Asset')
     //   .delete()
@@ -564,15 +594,24 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Best-effort audit log — never blocks the response even if it fails
-    await logAudit({
-      tableName: 'Asset',
-      recordId: asset_id,
-      action: 'DELETE',
-      oldValues: beforeRow ?? null,
-      newValues: data, // now includes the deleted_dt timestamp
-      userId: authResult.session?.user?.staffId || null
-    })
+    // Best-effort audit log — never blocks the response even if it fails.
+    // Raw insert (not logAudit) so we can include the deletion reason (WC)
+    try {
+      const { error: auditError } = await supabaseAdmin.from('AuditLog').insert({
+        table_name: 'Asset',
+        record_id: asset_id,
+        action: 'DELETE',
+        old_values: beforeRow ?? null,
+        new_values: data, // now includes the deleted_dt timestamp
+        reason,
+        user_id: authResult.session?.user?.staffId || null,
+      })
+      if (auditError) {
+        console.error('Failed to write audit log for asset deletion:', auditError.message)
+      }
+    } catch (auditErr) {
+      console.error('Unexpected error writing audit log:', auditErr)
+    }
 
     return NextResponse.json({ // Success response
         success: true, 
@@ -581,6 +620,79 @@ export async function DELETE(request: NextRequest) {
     )
   } catch (error: any) { // Catch and return any unexpected error
     console.error('DELETE /api/assets error:', { message: error?.message })
+    return serverError()
+  }
+}
+
+/****************************************
+ * PATCH - Restore a soft-deleted asset
+ * Usage: PATCH /api/assets?asset_id=A001
+ ***************************************/
+export async function PATCH(request: NextRequest) {
+  // Only admins can restore, same restriction as delete
+  const authResult = await validateSession('admin')
+
+  if (!authResult.authorized) {
+    return authResult.response
+  }
+
+  try {
+    const { searchParams } = new URL(request.url)
+    const asset_id = searchParams.get('asset_id')
+
+    if (!asset_id) {
+      return NextResponse.json(
+        { error: 'Asset ID is required' },
+        { status: 400 }
+      )
+    }
+
+    // Fetch the row's current (deleted) state before restoring — needed as
+    // old_values for the audit log (WC)
+    const { data: beforeRow } = await supabaseAdmin
+      .from('Asset')
+      .select('*')
+      .eq('asset_id', asset_id)
+      .not('deleted_dt', 'is', null)
+      .single()
+
+    const { data, error } = await supabaseAdmin
+      .from('Asset')
+      .update({ deleted_dt: null, updated_dt: new Date().toISOString() })
+      .eq('asset_id', asset_id)
+      .not('deleted_dt', 'is', null) // Only restore rows that are actually deleted
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Supabase restore error:', { message: error.message })
+      throw error
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        { error: 'Asset not found or not deleted' },
+        { status: 404 }
+      )
+    }
+
+    // Best-effort audit log — never blocks the response even if it fails (WC)
+    await logAudit({
+      tableName: 'Asset',
+      recordId: asset_id,
+      action: 'RESTORE',
+      oldValues: beforeRow ?? null,
+      newValues: data,
+      userId: authResult.session?.user?.staffId || null
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: 'Asset restored successfully',
+      data
+    })
+  } catch (error: any) {
+    console.error('PATCH /api/assets error:', { message: error?.message })
     return serverError()
   }
 }

@@ -353,6 +353,17 @@ export default function DynamicPage({ config }: DynamicPageProps) {
 
     if (!confirmed) return
 
+    // Ask for an optional reason so the audit log can record why this was
+    // deleted (e.g. "Chair broken beyond repair, written off"). Cancelling
+    // this prompt aborts the delete entirely, same as cancelling the
+    // confirmation above — only an empty string (pressing OK with nothing
+    // typed) proceeds with no reason recorded (WC)
+    const reason = window.prompt(
+      `Optional: why is this ${config.entityDisplayNameSingular.toLowerCase()} being deleted?`,
+      ''
+    )
+    if (reason === null) return // user cancelled the reason prompt
+
     try {
       const url = new URL(
         config.apiEndpoint,
@@ -360,7 +371,11 @@ export default function DynamicPage({ config }: DynamicPageProps) {
       )
       url.searchParams.set(config.primaryKey, itemId)
 
-      const res = await fetch(url.toString(), { method: 'DELETE' })
+      const res = await fetch(url.toString(), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim() || null }),
+      })
 
       if (res.ok) {
         setCurrentPage(1)
