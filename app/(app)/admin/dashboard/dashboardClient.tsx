@@ -22,7 +22,11 @@ import {
   BuildingOfficeIcon,
   UsersIcon,
   MapPinIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  PlusIcon,
+  PencilSquareIcon,
+  TrashIcon,
+  ArrowUturnLeftIcon
 } from '@heroicons/react/24/outline'
 
 type EntityView = 'assets' | 'department' | 'location'
@@ -40,48 +44,38 @@ interface ActivityRow {
   record_id: string
   old_values: Record<string, unknown> | null
   new_values: Record<string, unknown> | null
+  reason: string | null
+  staff: { name?: string; staff_id?: string } | null
   created_dt: string
 }
 
-// One-line summary of what changed — the full field-by-field diff lives on
-// the main /admin/auditLog page; this widget only needs a compact preview.
-function summarizeChange(row: ActivityRow): string {
-  if (row.action === 'CREATE') {
-    const name = (row.new_values?.name as string) || row.record_id
-    return `${name} created`
-  }
-  if (row.action === 'DELETE') {
-    const name = (row.old_values?.name as string) || row.record_id
-    return `${name} removed`
-  }
-  // UPDATE / RESTORE — find the first field that actually changed
-  const oldValues = row.old_values || {}
-  const newValues = row.new_values || {}
-  const fields = new Set([...Object.keys(oldValues), ...Object.keys(newValues)])
-  fields.delete('updated_dt')
-  fields.delete('created_dt')
+// Per-action verb, icon, and color — shared between the badge-less card
+// layout below so each row reads as a sentence instead of a raw diff (WC)
+const ACTIVITY_STYLE: Record<
+  ActivityRow['action'],
+  { verb: string; icon: typeof PlusIcon; iconBg: string; iconColor: string }
+> = {
+  CREATE: { verb: 'added', icon: PlusIcon, iconBg: 'bg-green-100', iconColor: 'text-green-700' },
+  UPDATE: { verb: 'updated', icon: PencilSquareIcon, iconBg: 'bg-blue-100', iconColor: 'text-blue-700' },
+  DELETE: { verb: 'deleted', icon: TrashIcon, iconBg: 'bg-red-100', iconColor: 'text-red-700' },
+  RESTORE: { verb: 'restored', icon: ArrowUturnLeftIcon, iconBg: 'bg-yellow-100', iconColor: 'text-yellow-700' },
+}
 
-  let changedCount = 0
-  let firstField = ''
-  let firstBefore: unknown
-  let firstAfter: unknown
+// The record's display name — prefer new_values.name (CREATE/UPDATE/RESTORE),
+// fall back to old_values.name (DELETE, since new_values won't have a name
+// once deleted_dt-only fields changed), then the raw record_id as a last resort
+function getRecordName(row: ActivityRow): string {
+  const name = (row.new_values?.name as string) || (row.old_values?.name as string)
+  return name || row.record_id
+}
 
-  fields.forEach((field) => {
-    const before = oldValues[field]
-    const after = newValues[field]
-    if (JSON.stringify(before) !== JSON.stringify(after)) {
-      changedCount++
-      if (!firstField) {
-        firstField = field
-        firstBefore = before
-        firstAfter = after
-      }
-    }
-  })
-
-  if (!firstField) return `${row.record_id} updated`
-  const summary = `${firstField}: ${String(firstBefore)} → ${String(firstAfter)}`
-  return changedCount > 1 ? `${summary} (+${changedCount - 1} more)` : summary
+// Strip the "[Manual] " / "[AI Assessment]" prefixes written by saveMaintenance
+// (see auditLog/page.tsx's parseReason) and keep only the first line — this
+// widget shows a one-line preview, not the full structured reason
+function getReasonPreview(reason: string | null): string | null {
+  if (!reason) return null
+  const stripped = reason.replace(/^\[.*?\]\s*/, '').split('\n')[0].trim()
+  return stripped || null
 }
 
 function formatRelativeTime(dateString: string): string {
@@ -346,41 +340,37 @@ export default function DashboardClient({ chart, entityView }: DashboardClientPr
                   </div>
                 </div>
               ) : (
-                <div className="overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-xs text-gray-600 uppercase border-b border-gray-200">
-                        <th className="pb-2 pr-2 font-medium w-20">Time</th>
-                        <th className="pb-2 pr-2 font-medium w-20">Action</th>
-                        <th className="pb-2 font-medium">Changes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentActivity.map((row) => {
-                        const styles: Record<string, string> = {
-                          CREATE: 'bg-green-100 text-green-800',
-                          UPDATE: 'bg-blue-100 text-blue-800',
-                          DELETE: 'bg-red-100 text-red-800',
-                          RESTORE: 'bg-yellow-100 text-yellow-800',
-                        }
-                        return (
-                          <tr key={row.audit_id} className="border-b border-gray-50 last:border-0">
-                            <td className="py-2 pr-2 text-xs text-gray-500 whitespace-nowrap align-top">
-                              {formatRelativeTime(row.created_dt)}
-                            </td>
-                            <td className="py-2 pr-2 align-top">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${styles[row.action] ?? 'bg-gray-100 text-gray-700'}`}>
-                                {row.action}
-                              </span>
-                            </td>
-                            <td className="py-2 text-xs text-gray-700 truncate max-w-0" title={summarizeChange(row)}>
-                              {summarizeChange(row)}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                <div className="flex flex-col">
+                  {recentActivity.map((row) => {
+                    const style = ACTIVITY_STYLE[row.action] ?? ACTIVITY_STYLE.UPDATE
+                    const Icon = style.icon
+                    const actor = row.staff?.name || 'Someone'
+                    const recordName = getRecordName(row)
+                    const reasonPreview = getReasonPreview(row.reason)
+
+                    return (
+                      <div
+                        key={row.audit_id}
+                        className="flex gap-3 py-2.5 border-t border-gray-100 first:border-t-0"
+                      >
+                        <div className={`w-8 h-8 rounded-full ${style.iconBg} flex items-center justify-center flex-shrink-0`}>
+                          <Icon className={`w-4 h-4 ${style.iconColor}`} strokeWidth={2.5} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-900 truncate">
+                            <span className="font-medium">{actor}</span> {style.verb}{' '}
+                            <span className="font-medium">{recordName}</span>
+                          </p>
+                          {reasonPreview && (
+                            <p className="text-xs text-gray-400 italic truncate mt-0.5">{reasonPreview}</p>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
+                          {formatRelativeTime(row.created_dt)}
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
