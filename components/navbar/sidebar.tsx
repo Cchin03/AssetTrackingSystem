@@ -47,7 +47,7 @@ const adminModules = [
       { label: 'Audit Log', path: 'auditLog' },
       { label: 'Assets', path: 'assets' },
       { label: 'Maintenance', path: 'maintainApprove' },
-      { label: 'Deleted Assets', path: 'deleteAssets' },
+      { label: 'Deleted Assets', path: 'deleted' },
       { label: 'Bulk Import', path: 'addMoreAssets' }
 
     ],
