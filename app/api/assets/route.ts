@@ -299,7 +299,9 @@ export async function POST(request: NextRequest) {
         created_dt: new Date().toISOString(),
         created_by: authResult.session?.user?.staffId || null,
         updated_dt: new Date().toISOString(),
-        deleted_dt: null
+        deleted_dt: null,
+        deleted_by: null,
+        delete_reason: null
       }])
       .select()
       .single()

@@ -341,20 +341,16 @@ export async function POST(req: NextRequest) {
 
     // Best-effort audit log — never blocks the response even if it fails.
     // Raw insert (not logAudit) so we can include a reason, matching the
-    // same condition-aware phrasing used by the admin Add Asset flow
+    // same "New asset registered" text used by the admin Add Asset flow
     // in app/api/assets/route.ts (WC)
     try {
-      const creationReason = data.condition === 'Spoiled'
-        ? 'New asset found but spoiled'
-        : 'New asset added'
-
       const { error: auditError } = await supabaseAdmin.from('AuditLog').insert({
         table_name: 'Asset',
         record_id: assetData.asset_id,
         action: 'CREATE',
         old_values: null,
         new_values: data,
-        reason: creationReason,
+        reason: 'New asset registered',
         user_id: staffId,
       })
       if (auditError) {
