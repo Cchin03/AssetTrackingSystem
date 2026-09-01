@@ -165,6 +165,8 @@ export interface Database {
                     updated_dt: string
                     // deleted_dt having value means the record is removed
                     deleted_dt: string | null
+                    deleted_by: string | null
+                    deleted_reason: string | null
                 }
                 Insert: {
                     asset_id: string
@@ -187,6 +189,9 @@ export interface Database {
                     created_by?: string | null
                     updated_dt?: string
                     deleted_dt?: string | null
+                    deleted_by: string | null
+                    deleted_reason: string | null
+
                 }
                 Update: {
                     asset_id?: string
@@ -209,6 +214,8 @@ export interface Database {
                     created_by?: string | null
                     updated_dt?: string
                     deleted_dt?: string | null
+                    deleted_by: string | null
+                    deleted_reason: string | null
                 }
                 Relationships: []
             }

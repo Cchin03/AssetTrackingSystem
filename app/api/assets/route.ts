@@ -143,11 +143,14 @@ export async function GET(request: NextRequest) {
     // Build database query
     let query = supabaseAdmin // Use Supabase admin to query the table
       .from('Asset') // Fetch from Asset table
-      // Join the related tables - 'location' and 'department' using their primary key
+      // Join the related tables - 'location' and 'department' using their primary key.
+      // 'deletedByStaff' joins Staff via deleted_by so the Deleted Assets
+      // page can show a name instead of a raw staff_id (WC)
       .select(`
         *,
         location:location_id(name, description),
-        department:department_id(name)
+        department:department_id(name),
+        deletedByStaff:deleted_by(name, staff_id)
       `, { count: 'exact' })
       /**
        * Commented by Desmond @ 11-Feb-2026
@@ -579,7 +582,11 @@ export async function DELETE(request: NextRequest) {
     const { data, error } = await supabaseAdmin // Create the Supabase connection
       .from('Asset')
       .update(
-        { deleted_dt: new Date().toISOString() } // Set a deleted_dt to the record
+        { 
+          deleted_dt: new Date().toISOString(), // Set a deleted_dt to the record
+          deleted_by: authResult.session?.user?.staffId || null,
+          delete_reason: reason,
+        }
       )
       .eq('asset_id', asset_id) // Where it is the selected asset_id
       .is('deleted_dt', null) // Where the deleted_dt is empty
@@ -662,7 +669,7 @@ export async function PATCH(request: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from('Asset')
-      .update({ deleted_dt: null, updated_dt: new Date().toISOString() })
+      .update({ deleted_dt: null, deleted_by: null, delete_reason: null, updated_dt: new Date().toISOString() })
       .eq('asset_id', asset_id)
       .not('deleted_dt', 'is', null) // Only restore rows that are actually deleted
       .select()
