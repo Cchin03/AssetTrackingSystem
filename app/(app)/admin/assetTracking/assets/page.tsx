@@ -160,7 +160,7 @@ const assetsConfig: dynamicPageConfig = {
   // Clicking Delete now navigates here (primary key appended) instead of
   // the default browser confirm() — collects a structured deletion
   // reason on its own page (WC)
-  deleteUrl: '/admin/assetTracking/deleteAsset',
+  deleteUrl: '/admin/assetTracking/assets/deleteAsset',
   searchFields: [
     { key: 'asset_id', label: 'Search by Asset ID' },  // First field - will be left search box
     { key: 'name', label: 'Search by Asset Name' }     // Second field - will be right search box
