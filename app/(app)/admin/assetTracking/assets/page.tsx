@@ -24,6 +24,10 @@
  * 
  *  - lib/barcode.ts
  *    Generate the barcode and saving it to the Supabase bucket storage
+ *
+ *  - app/(app)/admin/assetTracking/assets/delete/[id]/page.tsx
+ *    Dedicated delete-confirmation page (collects a deletion reason) —
+ *    deleteUrl below routes here instead of the default browser confirm() (WC)
 */
 import DynamicPage from '@/components/dynamicPage'
 import type { dynamicPageConfig } from '@/components/dynamicPage'
@@ -153,6 +157,10 @@ const assetsConfig: dynamicPageConfig = {
   showConditionFilter: true,
   addUrl: '/admin/assetTracking/addAsset',
   editUrl: '/admin/assetTracking/editAsset',
+  // Clicking Delete now navigates here (primary key appended) instead of
+  // the default browser confirm() — collects a structured deletion
+  // reason on its own page (WC)
+  deleteUrl: '/admin/assetTracking/assets/delete',
   searchFields: [
     { key: 'asset_id', label: 'Search by Asset ID' },  // First field - will be left search box
     { key: 'name', label: 'Search by Asset Name' }     // Second field - will be right search box

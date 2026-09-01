@@ -317,13 +317,17 @@ export async function POST(request: NextRequest) {
     // Raw insert (not logAudit) so we can include a reason — logAudit's
     // helper signature doesn't expose that field (WC)
     try {
+      const creationReason = data.condition === 'Spoiled'
+        ? 'New asset found but spoiled'
+        : 'New asset added'
+
       const { error: auditError } = await supabaseAdmin.from('AuditLog').insert({
         table_name: 'Asset',
         record_id: data.asset_id,
         action: 'CREATE',
         old_values: null,
         new_values: data,
-        reason: 'New asset registered',
+        reason: creationReason,
         user_id: authResult.session?.user?.staffId || null,
       })
       if (auditError) {

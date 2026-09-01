@@ -126,6 +126,14 @@ export interface dynamicPageConfig {
   addUrl?: string
   /** URL for the Edit page (primary key will be appended) — optional */
   editUrl?: string
+  /**
+   * URL for a dedicated Delete confirmation page (primary key will be
+   * appended) — optional. When set, clicking Delete navigates there
+   * instead of the built-in confirm()/prompt() flow, so pages that need
+   * a structured deletion reason (e.g. Assets) can collect it on their
+   * own page rather than a browser prompt (WC)
+   */
+  deleteUrl?: string
 
   // ── Optional extensions for maintenance-style pages ──────────────────────
 
@@ -343,26 +351,23 @@ export default function DynamicPage({ config }: DynamicPageProps) {
 
   // ── Delete handler ───────────────────────────────────────────
 
-  /** Show a confirmation dialog then send a DELETE request for the given row */
+  /** Show a confirmation dialog then send a DELETE request for the given row —
+   *  or, when config.deleteUrl is set, navigate to a dedicated delete page
+   *  instead (used by Assets, which collects a structured deletion reason
+   *  on its own page rather than a browser prompt) (WC) */
   const handleDeleteRequest = useCallback(async (item: EntityRow) => {
     const itemId = String(item[config.primaryKey])
+
+    if (config.deleteUrl) {
+      router.push(`${config.deleteUrl}/${itemId}`)
+      return
+    }
 
     const confirmed = window.confirm(
       `Are you sure you want to delete ${config.entityDisplayNameSingular.toLowerCase()} with ID: ${itemId}?\n\nThis action cannot be undone.`
     )
 
     if (!confirmed) return
-
-    // Ask for an optional reason so the audit log can record why this was
-    // deleted (e.g. "Chair broken beyond repair, written off"). Cancelling
-    // this prompt aborts the delete entirely, same as cancelling the
-    // confirmation above — only an empty string (pressing OK with nothing
-    // typed) proceeds with no reason recorded (WC)
-    const reason = window.prompt(
-      `Optional: why is this ${config.entityDisplayNameSingular.toLowerCase()} being deleted?`,
-      ''
-    )
-    if (reason === null) return // user cancelled the reason prompt
 
     try {
       const url = new URL(
@@ -371,11 +376,7 @@ export default function DynamicPage({ config }: DynamicPageProps) {
       )
       url.searchParams.set(config.primaryKey, itemId)
 
-      const res = await fetch(url.toString(), {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: reason.trim() || null }),
-      })
+      const res = await fetch(url.toString(), { method: 'DELETE' })
 
       if (res.ok) {
         setCurrentPage(1)
@@ -388,7 +389,7 @@ export default function DynamicPage({ config }: DynamicPageProps) {
       console.error('[handleDeleteRequest] Error deleting:', error)
       alert(`Failed to delete ${config.entityDisplayNameSingular.toLowerCase()}`)
     }
-  }, [config.apiEndpoint, config.primaryKey, config.entityDisplayNameSingular, loadData])
+  }, [config.apiEndpoint, config.primaryKey, config.entityDisplayNameSingular, config.deleteUrl, loadData, router])
 
   // ── Export handlers ──────────────────────────────────────────
 
