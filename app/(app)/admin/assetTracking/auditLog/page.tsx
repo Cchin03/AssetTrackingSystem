@@ -184,6 +184,24 @@ const auditLogConfig: dynamicPageConfig = {
       render: (v) => <span className="text-gray-500 whitespace-nowrap">{formatDate(String(v))}</span>,
     },
     {
+      // Shows *what* changed — table_name gives context (Asset vs.
+      // Maintenance vs. Location, etc.) since record_id alone (e.g. "A001")
+      // is ambiguous once AuditLog covers more than one entity (WC)
+      key: 'record_id',
+      label: 'Record',
+      sortable: false,
+      render: (_v, row) => {
+        const tableName = row.table_name as string | null
+        const recordId = row.record_id as string | null
+        return (
+          <div className="flex flex-col">
+            <span className="font-medium text-gray-900 whitespace-nowrap">{recordId ?? '—'}</span>
+            {tableName && <span className="text-xs text-gray-400">{tableName}</span>}
+          </div>
+        )
+      },
+    },
+    {
       key: 'staff',
       label: 'Who',
       sortable: false,

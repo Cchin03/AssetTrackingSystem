@@ -67,7 +67,11 @@ const assetUpdateSchema = z.object({
   condition: z.enum(ALLOWED_CONDITIONS).optional(),
   location_id: z.string().max(30).nullable().optional(),
   department_id: z.string().max(30).nullable().optional(),
-  category: z.string().max(50).optional()
+  category: z.string().max(50).optional(),
+  // Optional note on *why* the edit was made, e.g. 'Wrong action' when
+  // correcting a mistaken entry — stored on the audit log row, not the
+  // Asset table itself (WC)
+  reason: z.string().max(200).optional(),
 }).strict() // '.strict()' prevents attackers from sending extra properties
 
 /**
@@ -504,15 +508,26 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Best-effort audit log — never blocks the response even if it fails
-    await logAudit({
-      tableName: 'Asset',
-      recordId: asset_id,
-      action: 'UPDATE',
-      oldValues: beforeRow,
-      newValues: data,
-      userId: authResult.session?.user?.staffId || null
-    })
+    // Best-effort audit log — never blocks the response even if it fails.
+    // Raw insert (not logAudit) so we can include the edit reason —
+    // logAudit's helper signature doesn't expose that field, same reason
+    // POST/DELETE bypass it too (WC)
+    try {
+      const { error: auditError } = await supabaseAdmin.from('AuditLog').insert({
+        table_name: 'Asset',
+        record_id: asset_id,
+        action: 'UPDATE',
+        old_values: beforeRow,
+        new_values: data,
+        reason: input.reason?.trim() || null,
+        user_id: authResult.session?.user?.staffId || null,
+      })
+      if (auditError) {
+        console.error('Failed to write audit log for asset update:', auditError.message)
+      }
+    } catch (auditErr) {
+      console.error('Unexpected error writing audit log:', auditErr)
+    }
 
     return NextResponse.json( // Success response
       { success: true, data}
