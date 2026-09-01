@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
       ? searchParams.get('searchField')!
       : 'name'
 
-    const allowedSortFields = ['created_dt', 'updated_dt', 'name']
+    const allowedSortFields = ['created_dt', 'updated_dt', 'name', 'deleted_dt']
     const sortBy = allowedSortFields.includes(
       searchParams.get('sortBy') || ''
     )

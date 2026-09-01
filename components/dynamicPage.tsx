@@ -168,13 +168,21 @@ async function fetchAllRecords(
   let hasMore = true
 
   while (hasMore) {
-    const params = new URLSearchParams({
-      page: page.toString(),
-      limit: API_LIMIT.toString(),
-      ...baseParams,
+    // Build against the origin so relative apiEndpoint values work, then merge
+    // params onto whatever query string apiEndpoint already has (e.g. Deleted
+    // Assets uses '/api/assets?deleted=true') instead of concatenating a
+    // second '?', which corrupts both the existing and new params (WC)
+    const url = new URL(
+      apiEndpoint,
+      typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+    )
+    url.searchParams.set('page', page.toString())
+    url.searchParams.set('limit', API_LIMIT.toString())
+    Object.entries(baseParams).forEach(([key, value]) => {
+      url.searchParams.set(key, value)
     })
 
-    const res = await fetch(`${apiEndpoint}?${params}`)
+    const res = await fetch(url.toString())
 
     if (!res.ok) {
       throw new Error(
@@ -267,7 +275,15 @@ export default function DynamicPage({ config }: DynamicPageProps) {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({
+      // Build against the origin, then merge params onto whatever query
+      // string config.apiEndpoint already has (e.g. Deleted Assets uses
+      // '/api/assets?deleted=true') instead of concatenating a second '?',
+      // which corrupts both the existing and new params (WC)
+      const url = new URL(
+        config.apiEndpoint,
+        typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+      )
+      const params = {
         page: currentPage.toString(),
         limit: recordsPerPage.toString(),
         sortBy,
@@ -278,9 +294,12 @@ export default function DynamicPage({ config }: DynamicPageProps) {
         ...(config.tabsConfig && activeTab && {
           [config.tabQueryParam ?? 'status']: activeTab,
         }),
+      }
+      Object.entries(params).forEach(([key, value]) => {
+        url.searchParams.set(key, value)
       })
 
-      const res = await fetch(`${config.apiEndpoint}?${params}`)
+      const res = await fetch(url.toString())
 
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`)
