@@ -340,37 +340,47 @@ export default function DashboardClient({ chart, entityView }: DashboardClientPr
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col">
-                  {recentActivity.map((row) => {
-                    const style = ACTIVITY_STYLE[row.action] ?? ACTIVITY_STYLE.UPDATE
-                    const Icon = style.icon
-                    const actor = row.staff?.name || 'Someone'
-                    const recordName = getRecordName(row)
-                    const reasonPreview = getReasonPreview(row.reason)
+                <div className="overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-gray-600 uppercase border-b border-gray-200">
+                        <th className="pb-2 pr-2 font-medium w-16">Time</th>
+                        <th className="pb-2 pr-2 font-medium w-10"></th>
+                        <th className="pb-2 font-medium">Activity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentActivity.map((row) => {
+                        const style = ACTIVITY_STYLE[row.action] ?? ACTIVITY_STYLE.UPDATE
+                        const Icon = style.icon
+                        const actor = row.staff?.name || 'Someone'
+                        const recordName = getRecordName(row)
+                        const reasonPreview = getReasonPreview(row.reason)
 
-                    return (
-                      <div
-                        key={row.audit_id}
-                        className="flex gap-3 py-2.5 border-t border-gray-100 first:border-t-0"
-                      >
-                        <div className={`w-8 h-8 rounded-full ${style.iconBg} flex items-center justify-center flex-shrink-0`}>
-                          <Icon className={`w-4 h-4 ${style.iconColor}`} strokeWidth={2.5} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-gray-900 truncate">
-                            <span className="font-medium">{actor}</span> {style.verb}{' '}
-                            <span className="font-medium">{recordName}</span>
-                          </p>
-                          {reasonPreview && (
-                            <p className="text-xs text-gray-400 italic truncate mt-0.5">{reasonPreview}</p>
-                          )}
-                        </div>
-                        <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
-                          {formatRelativeTime(row.created_dt)}
-                        </span>
-                      </div>
-                    )
-                  })}
+                        return (
+                          <tr key={row.audit_id} className="border-b border-gray-50 last:border-0">
+                            <td className="py-2.5 pr-2 text-xs text-gray-400 whitespace-nowrap align-top">
+                              {formatRelativeTime(row.created_dt)}
+                            </td>
+                            <td className="py-2.5 pr-2 align-top">
+                              <div className={`w-6 h-6 rounded-full ${style.iconBg} flex items-center justify-center`}>
+                                <Icon className={`w-3.5 h-3.5 ${style.iconColor}`} strokeWidth={2.5} />
+                              </div>
+                            </td>
+                            <td className="py-2.5 align-top">
+                              <p className="text-sm text-gray-900 truncate">
+                                <span className="font-medium">{actor}</span> {style.verb}{' '}
+                                <span className="font-medium">{recordName}</span>
+                              </p>
+                              {reasonPreview && (
+                                <p className="text-xs text-gray-400 italic truncate mt-0.5">{reasonPreview}</p>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
