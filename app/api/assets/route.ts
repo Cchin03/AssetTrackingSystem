@@ -67,11 +67,7 @@ const assetUpdateSchema = z.object({
   condition: z.enum(ALLOWED_CONDITIONS).optional(),
   location_id: z.string().max(30).nullable().optional(),
   department_id: z.string().max(30).nullable().optional(),
-  category: z.string().max(50).optional(),
-  // Optional note on *why* the edit was made, e.g. 'Wrong action' when
-  // correcting a mistaken entry — stored on the audit log row, not the
-  // Asset table itself (WC)
-  reason: z.string().max(200).optional(),
+  category: z.string().max(50).optional()
 }).strict() // '.strict()' prevents attackers from sending extra properties
 
 /**
@@ -130,7 +126,7 @@ export async function GET(request: NextRequest) {
       ? searchParams.get('searchField')!
       : 'name'
 
-    const allowedSortFields = ['created_dt', 'updated_dt', 'name', 'deleted_dt']
+    const allowedSortFields = ['created_dt', 'updated_dt', 'name']
     const sortBy = allowedSortFields.includes(
       searchParams.get('sortBy') || ''
     )
@@ -303,9 +299,7 @@ export async function POST(request: NextRequest) {
         created_dt: new Date().toISOString(),
         created_by: authResult.session?.user?.staffId || null,
         updated_dt: new Date().toISOString(),
-        deleted_dt: null,
-        deleted_by: null,
-        delete_reason: null
+        deleted_dt: null
       }])
       .select()
       .single()
@@ -508,26 +502,15 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Best-effort audit log — never blocks the response even if it fails.
-    // Raw insert (not logAudit) so we can include the edit reason —
-    // logAudit's helper signature doesn't expose that field, same reason
-    // POST/DELETE bypass it too (WC)
-    try {
-      const { error: auditError } = await supabaseAdmin.from('AuditLog').insert({
-        table_name: 'Asset',
-        record_id: asset_id,
-        action: 'UPDATE',
-        old_values: beforeRow,
-        new_values: data,
-        reason: input.reason?.trim() || null,
-        user_id: authResult.session?.user?.staffId || null,
-      })
-      if (auditError) {
-        console.error('Failed to write audit log for asset update:', auditError.message)
-      }
-    } catch (auditErr) {
-      console.error('Unexpected error writing audit log:', auditErr)
-    }
+    // Best-effort audit log — never blocks the response even if it fails
+    await logAudit({
+      tableName: 'Asset',
+      recordId: asset_id,
+      action: 'UPDATE',
+      oldValues: beforeRow,
+      newValues: data,
+      userId: authResult.session?.user?.staffId || null
+    })
 
     return NextResponse.json( // Success response
       { success: true, data}
@@ -675,6 +658,17 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    // Read the optional restore reason (e.g. "Wrong action applied")
+    // sent from the Deleted Assets page's restore confirmation. Parsed
+    // defensively since PATCH requests may arrive with no body at all (WC)
+    let reason: string | null = null
+    try {
+      const body = await request.json()
+      reason = typeof body?.reason === 'string' ? body.reason.trim() || null : null
+    } catch {
+      // No body sent — proceed with reason: null
+    }
+
     // Fetch the row's current (deleted) state before restoring — needed as
     // old_values for the audit log (WC)
     const { data: beforeRow } = await supabaseAdmin
@@ -704,15 +698,24 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    // Best-effort audit log — never blocks the response even if it fails (WC)
-    await logAudit({
-      tableName: 'Asset',
-      recordId: asset_id,
-      action: 'RESTORE',
-      oldValues: beforeRow ?? null,
-      newValues: data,
-      userId: authResult.session?.user?.staffId || null
-    })
+    // Best-effort audit log — never blocks the response even if it fails.
+    // Raw insert (not logAudit) so we can include the restore reason (WC)
+    try {
+      const { error: auditError } = await supabaseAdmin.from('AuditLog').insert({
+        table_name: 'Asset',
+        record_id: asset_id,
+        action: 'RESTORE',
+        old_values: beforeRow ?? null,
+        new_values: data,
+        reason,
+        user_id: authResult.session?.user?.staffId || null,
+      })
+      if (auditError) {
+        console.error('Failed to write audit log for asset restore:', auditError.message)
+      }
+    } catch (auditErr) {
+      console.error('Unexpected error writing audit log:', auditErr)
+    }
 
     return NextResponse.json({
       success: true,
