@@ -33,8 +33,19 @@ const handleRestore = async (row: Record<string, unknown>, refresh: () => void) 
   const assetId = row.asset_id as string
   if (!confirm(`Restore asset ${assetId}? It will reappear in the active Assets list.`)) return
 
+  // Ask why — e.g. "Wrong action applied", "Deleted by mistake" — so the
+  // audit log shows a reason instead of "No reason given" for RESTORE
+  // entries. Cancelling this prompt aborts the restore entirely (WC)
+  const reason = window.prompt(
+    'Optional: why is this asset being restored? (e.g. "Wrong action applied")',
+    ''
+  )
+  if (reason === null) return // user cancelled
+
   const res = await fetch(`/api/assets?asset_id=${encodeURIComponent(assetId)}`, {
     method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason: reason.trim() || null }),
   })
 
   if (res.ok) {
