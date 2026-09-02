@@ -320,7 +320,7 @@ export default function DashboardClient({ chart, entityView }: DashboardClientPr
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold text-gray-900">Recent Activity</h2>
                 <button
-                  onClick={() => router.push('/admin/auditLog')}
+                  onClick={() => router.push('/admin/assetTracking/auditLog')}
                   className="text-sm text-blue-600 hover:text-blue-800 font-medium"
                 >
                   View all →
