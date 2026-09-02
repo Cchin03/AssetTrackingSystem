@@ -20,6 +20,20 @@ export async function GET(request: NextRequest) {
     const location = (searchParams.get('location') || '').slice(0, 100);
     const condition = (searchParams.get('condition')|| '');
 
+    // Generic search/searchField — this is what dynamicPage.tsx's search
+    // box actually sends (?search=X&searchField=asset_id or location_id).
+    // Without this, typing into the Maintenance Review search box did
+    // nothing, since only the specific 'asset_id'/'location' params above
+    // were ever being read (and 'location' didn't even match the
+    // 'location_id' key the search box actually sends) (WC)
+    const search = (searchParams.get('search') || '').slice(0, 100);
+    const allowedSearchFields: Record<string, string> = {
+      asset_id: 'asset_id',
+      location_id: 'location_id',
+    };
+    const searchFieldParam = searchParams.get('searchField') || '';
+    const searchColumn = allowedSearchFields[searchFieldParam] ?? null;
+
     // Whitelist allowed status values, default to 'pending' if invalid
     const allowedStatuses = ['pending', 'approved', 'rejected'];
     const safeStatus = allowedStatuses.includes(status) ? status : 'pending';
@@ -40,6 +54,12 @@ export async function GET(request: NextRequest) {
       if (assetId) q = q.ilike('asset_id', `%${assetId}%`);
       if (location) q = q.ilike('location_id', `%${location}%`);
       if (safeCondition) q = q.eq('condition_status', safeCondition);
+
+      // Apply the generic search box, same pattern as assets/route.ts
+      // and auditLog/route.ts (WC)
+      if (search && searchColumn) {
+        q = q.ilike(searchColumn, `%${search}%`);
+      }
 
       return q;
     };

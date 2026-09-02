@@ -24,10 +24,22 @@ export async function GET(request: NextRequest) {
     const page = Math.max(parseInt(searchParams.get('page') || '1'), 1)
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 200)
 
-    // Optional filters
+    // Optional direct filters (used by anyone linking straight to this API
+    // with a known field, e.g. ?record_id=A001)
     const tableName = (searchParams.get('table_name') || '').slice(0, 50)
     const recordId = (searchParams.get('record_id') || '').slice(0, 30)
     const userId = (searchParams.get('user_id') || '').slice(0, 30)
+
+    // Generic search/searchField — this is what dynamicPage.tsx's search
+    // box actually sends (?search=X&searchField=record_id), matching the
+    // same convention already used by app/api/assets/route.ts. Without
+    // this, the audit log's search box silently did nothing, since only
+    // the specific 'record_id' param above was ever being read (WC)
+    const search = (searchParams.get('search') || '').slice(0, 100)
+    const allowedSearchFields = ['record_id']
+    const searchField = allowedSearchFields.includes(searchParams.get('searchField') || '')
+      ? searchParams.get('searchField')!
+      : 'record_id'
 
     const actionParam = searchParams.get('action') || ''
     const safeAction:  AuditAction | null = isValidAction(actionParam) ? actionParam : null
@@ -43,6 +55,11 @@ export async function GET(request: NextRequest) {
     if (recordId) query = query.ilike('record_id', `%${recordId}%`)
     if (userId) query = query.eq('user_id', userId)
     if (safeAction) query = query.eq('action', safeAction)
+
+    // Apply the generic search box, same pattern as assets/route.ts (WC)
+    if (search) {
+      query = query.ilike(searchField, `%${search}%`)
+    }
 
     query = query.order('created_dt', { ascending: false })
 
